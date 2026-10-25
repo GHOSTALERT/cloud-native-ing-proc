@@ -1,0 +1,65 @@
+$ docker compose up -d --scale worker=4
+ Network imgframe_default  Creating
+ Network imgframe_default  Created
+ Container imgframe-redis-1  Creating
+ Container imgframe-redis-1  Created
+ Container imgframe-api-1  Creating
+ Container imgframe-api-1  Created
+ Container imgframe-worker-4  Creating
+ Container imgframe-worker-1  Creating
+ Container imgframe-worker-2  Creating
+ Container imgframe-worker-3  Creating
+ Container imgframe-worker-1  Created
+ Container imgframe-worker-3  Created
+ Container imgframe-worker-2  Created
+ Container imgframe-worker-4  Created
+ Container imgframe-redis-1  Starting
+ Container imgframe-redis-1  Started
+ Container imgframe-redis-1  Waiting
+ Container imgframe-redis-1  Healthy
+ Container imgframe-api-1  Starting
+ Container imgframe-api-1  Started
+ Container imgframe-redis-1  Waiting
+ Container imgframe-redis-1  Healthy
+ Container imgframe-worker-4  Starting
+ Container imgframe-worker-4  Started
+ Container imgframe-worker-2  Starting
+ Container imgframe-worker-2  Started
+ Container imgframe-worker-3  Starting
+ Container imgframe-worker-3  Started
+ Container imgframe-worker-1  Starting
+ Container imgframe-worker-1  Started
+
+$ docker compose ps
+NAME                IMAGE              STATUS                   PORTS
+imgframe-api-1      imgframe:latest    Up 5 seconds             0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+imgframe-redis-1    redis:7.2-alpine   Up 7 seconds (healthy)   6379/tcp
+imgframe-worker-1   imgframe:latest    Up 4 seconds             8000/tcp
+imgframe-worker-2   imgframe:latest    Up 4 seconds             8000/tcp
+imgframe-worker-3   imgframe:latest    Up 4 seconds             8000/tcp
+imgframe-worker-4   imgframe:latest    Up 4 seconds             8000/tcp
+
+$ docker kill imgframe-worker-1      # crash a container mid-job
+imgframe-worker-1
+
+$ python scripts/load_test.py --api http://127.0.0.1:8000 --jobs 2 --op bilateral --image samples/synthetic_8192.png
+submitting 2 x bilateral jobs to http://127.0.0.1:8000 ...
+queued 512 tiles in 2.5s: 303f8db6fd01, 5861e95e4dac
+
+  time  pending  in-progress  workers  retries  jobs done
+  2.5s      475            4        4        0  0/2
+  3.5s      362            4        4        0  0/2
+  4.5s      248            3        4        0  0/2
+  5.5s      145            4        4        0  0/2
+  6.5s       48            4        4        0  0/2
+  7.5s        0            1        4        0  0/2
+  8.5s        0            1        4        0  1/2
+  9.5s        0            1        4        0  1/2
+ 10.5s        0            1        4        0  1/2
+ 11.5s        0            1        4        0  1/2
+ 12.6s        0            0        3        1  1/2
+ 13.6s        0            0        3        1  2/2
+
+all jobs finished in 13.6s
+  303f8db6fd01: done, 256 tiles, 1 retries, end-to-end 12.6757s
+  5861e95e4dac: done, 256 tiles, 0 retries, end-to-end 6.978s

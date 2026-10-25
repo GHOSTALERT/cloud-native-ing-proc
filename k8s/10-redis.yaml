@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: imgframe
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels: { app: redis }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          args: ["--save", "", "--appendonly", "no", "--maxmemory", "3gb"]
+          ports: [{ containerPort: 6379 }]
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 3584Mi }
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: imgframe
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379, targetPort: 6379 }]

@@ -1,0 +1,5 @@
+$ kubectl -n imgframe logs deploy/autoscaler | grep scaling
+2026-10-24 18:20:19,021 autoscaler INFO autoscaling imgframe/worker between 1 and 8 replicas (16 tasks per worker)
+2026-10-24 18:20:49,057 autoscaler INFO queue depth 0: scaling down 2 -> 1
+2026-10-24 18:21:07,081 autoscaler INFO queue depth 695: scaling up 1 -> 8
+2026-10-24 18:21:43,125 autoscaler INFO queue depth 0: scaling down 8 -> 1

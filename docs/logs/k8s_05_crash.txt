@@ -1,0 +1,39 @@
+$ # crash a worker mid-job: SIGKILL its container (worker-d44777889-wqxgl)
+
+
+$ minikube ssh -- docker kill --signal KILL 70d010fb96cd
+70d010fb96cd
+
+$ python scripts/load_test.py --api http://192.168.49.2:30080 --jobs 2 --op bilateral --image samples/synthetic_8192.png
+submitting 2 x bilateral jobs to http://192.168.49.2:30080 ...
+queued 512 tiles in 2.5s: 66c903e0a60f, c5b2027224a7
+
+  time  pending  in-progress  workers  retries  jobs done
+  2.5s      504            1        1        0  0/2
+  3.5s      471            1        1        0  0/2
+  4.5s      471            1        1        0  0/2
+  5.5s      456            2        1        0  0/2
+  6.6s      297            8        8        0  0/2
+  7.6s       86            9        8        0  0/2
+  8.6s        0            1        8        0  0/2
+  9.6s        0            1        8        0  1/2
+ 10.6s        0            1        8        0  1/2
+ 11.6s        0            1        8        0  1/2
+ 12.6s        0            1        8        0  1/2
+ 13.6s        0            0        8        1  1/2
+ 14.6s        0            0        8        1  2/2
+
+all jobs finished in 14.6s
+  66c903e0a60f: done, 256 tiles, 1 retries, end-to-end 13.5346s
+  c5b2027224a7: done, 256 tiles, 0 retries, end-to-end 8.052s
+
+$ kubectl -n imgframe get pods -l app=worker   # RESTARTS = 1: Kubernetes restarted it
+NAME                     READY   STATUS    RESTARTS      AGE
+worker-d44777889-6ch2m   1/1     Running   0             10s
+worker-d44777889-9qnck   1/1     Running   0             10s
+worker-d44777889-b5npj   1/1     Running   0             10s
+worker-d44777889-b8ndt   1/1     Running   0             10s
+worker-d44777889-fr8l7   1/1     Running   0             10s
+worker-d44777889-s79v6   1/1     Running   0             10s
+worker-d44777889-v5zbm   1/1     Running   0             10s
+worker-d44777889-wqxgl   1/1     Running   1 (11s ago)   2m29s

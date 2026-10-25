@@ -1,0 +1,36 @@
+$ .venv/bin/python -m pytest -v -p no:warnings
+============================= test session starts ==============================
+platform linux -- Python 3.13.7, pytest-9.1.1, pluggy-1.7.0 -- /home/deleted-user/Downloads/cloud proj/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/deleted-user/Downloads/cloud proj
+plugins: anyio-4.15.1
+collecting ... collected 26 items
+
+tests/test_pipeline.py::test_upload_process_download[canny] PASSED       [  3%]
+tests/test_pipeline.py::test_upload_process_download[gaussian_blur] PASSED [  7%]
+tests/test_pipeline.py::test_worker_crash_is_recovered PASSED            [ 11%]
+tests/test_pipeline.py::test_bad_requests PASSED                         [ 15%]
+tests/test_pipeline.py::test_autoscaler_policy PASSED                    [ 19%]
+tests/test_pipeline.py::test_delete_job PASSED                           [ 23%]
+tests/test_pipeline.py::test_backpressure_when_redis_is_full PASSED      [ 26%]
+tests/test_store.py::test_claim_complete_counts_progress PASSED          [ 30%]
+tests/test_store.py::test_duplicate_completion_is_ignored PASSED         [ 34%]
+tests/test_store.py::test_expired_lease_is_requeued PASSED               [ 38%]
+tests/test_store.py::test_heartbeat_extends_lease PASSED                 [ 42%]
+tests/test_store.py::test_job_fails_after_max_retries PASSED             [ 46%]
+tests/test_store.py::test_release_does_not_count_as_attempt PASSED       [ 50%]
+tests/test_tiling.py::test_tiles_cover_image_exactly_once PASSED         [ 53%]
+tests/test_tiling.py::test_split_and_reconstruct_roundtrip PASSED        [ 57%]
+tests/test_tiling.py::test_local_filters_match_whole_image_exactly[gaussian_blur] PASSED [ 61%]
+tests/test_tiling.py::test_local_filters_match_whole_image_exactly[sobel] PASSED [ 65%]
+tests/test_tiling.py::test_local_filters_match_whole_image_exactly[sharpen] PASSED [ 69%]
+tests/test_tiling.py::test_local_filters_match_whole_image_exactly[grayscale] PASSED [ 73%]
+tests/test_tiling.py::test_local_filters_match_whole_image_exactly[bilateral] PASSED [ 76%]
+tests/test_tiling.py::test_canny_matches_whole_image PASSED              [ 80%]
+tests/test_tiling.py::test_parallel_equals_sequential PASSED             [ 84%]
+tests/test_tiling.py::test_png_codec_roundtrip PASSED                    [ 88%]
+tests/test_tiling.py::test_unknown_op PASSED                             [ 92%]
+tests/test_tiling.py::test_raw_tile_codec_roundtrip[shape0] PASSED       [ 96%]
+tests/test_tiling.py::test_raw_tile_codec_roundtrip[shape1] PASSED       [100%]
+
+============================== 26 passed in 2.02s ==============================

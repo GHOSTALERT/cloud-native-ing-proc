@@ -1,0 +1,82 @@
+{
+  "size": 8192,
+  "tile_size": 512,
+  "cpus": 16,
+  "rows": [
+    {
+      "op": "bilateral",
+      "mode": "sequential",
+      "workers": 1,
+      "time_s": 5.3216,
+      "speedup": 1.0,
+      "efficiency": 1.0,
+      "partition_s": null,
+      "processing_s": 5.3216,
+      "processing_speedup": 1.0,
+      "aggregate_s": null,
+      "retries": 0,
+      "cores_busy_avg": null,
+      "rss_peak_mb": null
+    },
+    {
+      "op": "bilateral",
+      "mode": "distributed",
+      "workers": 1,
+      "time_s": 8.8779,
+      "speedup": 0.6,
+      "efficiency": 0.6,
+      "partition_s": 1.4746,
+      "processing_s": 6.354,
+      "processing_speedup": 0.84,
+      "aggregate_s": 0.4933,
+      "retries": 0,
+      "cores_busy_avg": 2.27,
+      "rss_peak_mb": 2094.3
+    },
+    {
+      "op": "bilateral",
+      "mode": "distributed",
+      "workers": 2,
+      "time_s": 5.8302,
+      "speedup": 0.91,
+      "efficiency": 0.46,
+      "partition_s": 1.4502,
+      "processing_s": 3.4247,
+      "processing_speedup": 1.55,
+      "aggregate_s": 0.4611,
+      "retries": 0,
+      "cores_busy_avg": 2.74,
+      "rss_peak_mb": 2287.8
+    },
+    {
+      "op": "bilateral",
+      "mode": "distributed",
+      "workers": 4,
+      "time_s": 4.5543,
+      "speedup": 1.17,
+      "efficiency": 0.29,
+      "partition_s": 1.4658,
+      "processing_s": 1.9787,
+      "processing_speedup": 2.69,
+      "aggregate_s": 0.5737,
+      "retries": 0,
+      "cores_busy_avg": 3.46,
+      "rss_peak_mb": 2737.5
+    },
+    {
+      "op": "bilateral",
+      "mode": "distributed",
+      "workers": 8,
+      "time_s": 3.7979,
+      "speedup": 1.4,
+      "efficiency": 0.18,
+      "partition_s": 1.4758,
+      "processing_s": 1.2466,
+      "processing_speedup": 4.27,
+      "aggregate_s": 0.5806,
+      "retries": 0,
+      "cores_busy_avg": 4.43,
+      "rss_peak_mb": 3294.6
+    }
+  ]
+}

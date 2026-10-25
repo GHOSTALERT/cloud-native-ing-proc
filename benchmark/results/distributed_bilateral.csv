@@ -1,0 +1,6 @@
+op,mode,workers,time_s,speedup,efficiency,partition_s,processing_s,processing_speedup,aggregate_s,retries,cores_busy_avg,rss_peak_mb
+bilateral,sequential,1,5.3216,1.0,1.0,,5.3216,1.0,,0,,
+bilateral,distributed,1,8.8779,0.6,0.6,1.4746,6.354,0.84,0.4933,0,2.27,2094.3
+bilateral,distributed,2,5.8302,0.91,0.46,1.4502,3.4247,1.55,0.4611,0,2.74,2287.8
+bilateral,distributed,4,4.5543,1.17,0.29,1.4658,1.9787,2.69,0.5737,0,3.46,2737.5
+bilateral,distributed,8,3.7979,1.4,0.18,1.4758,1.2466,4.27,0.5806,0,4.43,3294.6

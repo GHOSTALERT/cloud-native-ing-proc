@@ -1,0 +1,17 @@
+# Alternative to the queue autoscaler if KEDA is installed: scales on Redis list length.
+# Do not run together with 40-autoscaler.yaml.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-queue
+  namespace: imgframe
+spec:
+  scaleTargetRef: { name: worker }
+  minReplicaCount: 1
+  maxReplicaCount: 8
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.imgframe.svc.cluster.local:6379
+        listName: imgframe:queue:pending
+        listLength: "16"

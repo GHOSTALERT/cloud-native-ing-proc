@@ -1,0 +1,56 @@
+# Queue-length autoscaler: replicas = clamp(ceil(queue_depth / TASKS_PER_WORKER), MIN, MAX)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autoscaler
+  namespace: imgframe
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: worker-scaler
+  namespace: imgframe
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    resourceNames: ["worker"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: autoscaler-worker-scaler
+  namespace: imgframe
+subjects: [{ kind: ServiceAccount, name: autoscaler, namespace: imgframe }]
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: worker-scaler }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoscaler
+  namespace: imgframe
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: autoscaler }
+  template:
+    metadata:
+      labels: { app: autoscaler }
+    spec:
+      serviceAccountName: autoscaler
+      containers:
+        - name: autoscaler
+          image: imgframe:latest
+          imagePullPolicy: Never
+          command: ["python", "-m", "autoscaler.main"]
+          envFrom: [{ configMapRef: { name: imgframe-config } }]
+          env:
+            - { name: NAMESPACE, value: imgframe }
+            - { name: WORKER_DEPLOYMENT, value: worker }
+            - { name: MIN_WORKERS, value: "1" }
+            - { name: MAX_WORKERS, value: "8" }
+            - { name: TASKS_PER_WORKER, value: "16" }
+            - { name: SCALE_DOWN_DELAY, value: "30" }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }

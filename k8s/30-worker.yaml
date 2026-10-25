@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: imgframe
+spec:
+  replicas: 2                              # the autoscaler adjusts this from queue length
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      terminationGracePeriodSeconds: 30    # SIGTERM -> finish/release in-flight tiles
+      containers:
+        - name: worker
+          image: imgframe:latest
+          imagePullPolicy: Never
+          command: ["python", "-m", "worker.main"]
+          envFrom: [{ configMapRef: { name: imgframe-config } }]
+          env:
+            - name: HOSTNAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          resources:
+            requests: { cpu: 500m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }

@@ -1,0 +1,26 @@
+$ .venv/bin/python -m benchmark.bench_local --size 8192 --ops bilateral canny gaussian_blur --workers 1 2 4 8 16
+machine: 8 physical / 16 logical cores, 23 GB RAM
+image: 8192x8192 (192 MB), tile 512px
+
+[bilateral] sequential: 5.323s  cpu 2.21 cores
+[bilateral]  1 workers: 6.339s  speedup  0.84x  efficiency  84%  cpu 2.18 cores  mem 1339.8 MB  match 100.000%
+[bilateral]  2 workers: 3.410s  speedup  1.56x  efficiency  78%  cpu 3.25 cores  mem 1558.3 MB  match 100.000%
+[bilateral]  4 workers: 1.898s  speedup  2.80x  efficiency  70%  cpu 5.43 cores  mem 1543.3 MB  match 100.000%
+[bilateral]  8 workers: 1.318s  speedup  4.04x  efficiency  50%  cpu 8.41 cores  mem 1904.0 MB  match 100.000%
+[bilateral] 16 workers: 1.271s  speedup  4.19x  efficiency  26%  cpu 13.18 cores  mem 2264.0 MB  match 100.000%
+
+[canny] sequential: 0.211s  cpu 3.5 cores
+[canny]  1 workers: 0.826s  speedup  0.26x  efficiency  26%  cpu 3.56 cores  mem 1179.2 MB  match 99.976%
+[canny]  2 workers: 0.568s  speedup  0.37x  efficiency  19%  cpu 4.56 cores  mem 1026.7 MB  match 99.976%
+[canny]  4 workers: 0.558s  speedup  0.38x  efficiency   9%  cpu 6.4 cores  mem 1087.0 MB  match 99.976%
+[canny]  8 workers: 0.502s  speedup  0.42x  efficiency   5%  cpu 6.51 cores  mem 1264.8 MB  match 99.976%
+[canny] 16 workers: 0.470s  speedup  0.45x  efficiency   3%  cpu 7.68 cores  mem 1652.6 MB  match 99.976%
+
+[gaussian_blur] sequential: 0.288s  cpu 2.67 cores
+[gaussian_blur]  1 workers: 1.339s  speedup  0.22x  efficiency  22%  cpu 2.93 cores  mem 1439.6 MB  match 100.000%
+[gaussian_blur]  2 workers: 0.904s  speedup  0.32x  efficiency  16%  cpu 4.23 cores  mem 1568.1 MB  match 100.000%
+[gaussian_blur]  4 workers: 0.692s  speedup  0.42x  efficiency  10%  cpu 6.47 cores  mem 1547.5 MB  match 100.000%
+[gaussian_blur]  8 workers: 0.639s  speedup  0.45x  efficiency   6%  cpu 7.42 cores  mem 1924.6 MB  match 100.000%
+[gaussian_blur] 16 workers: 0.701s  speedup  0.41x  efficiency   3%  cpu 7.78 cores  mem 2262.0 MB  match 100.000%
+
+wrote benchmark/results/results.csv, results.json, charts.png

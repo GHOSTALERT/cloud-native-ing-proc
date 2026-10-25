@@ -1,0 +1,37 @@
+# Local multi-container run:  docker compose up --build --scale worker=4
+name: imgframe          # fixed project name -> containers imgframe-worker-1, ...
+# Web UI / API: http://localhost:8000
+services:
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "3gb"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+
+  api:
+    build: .
+    image: imgframe:latest
+    ports: ["8000:8000"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TILE_SIZE: "512"
+    depends_on:
+      redis: { condition: service_healthy }
+
+  worker:
+    image: imgframe:latest
+    command: ["python", "-m", "worker.main"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      WORKER_PROCS: "1"
+      LEASE_SECONDS: "10"
+    depends_on:
+      redis: { condition: service_healthy }
+      api: { condition: service_started }   # api builds the shared image
+    deploy:
+      replicas: 4
+      resources:
+        limits: { cpus: "1.0", memory: 1g }
+    stop_grace_period: 25s

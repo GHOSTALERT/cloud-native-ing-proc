@@ -1,0 +1,6 @@
+$ python -m benchmark.bench_distributed --api $API --label N   # N = 1, 2, 4, 8 worker pods
+sequential   workers= 1  end-to-end   5.14s  speedup 1.00x  parallel phase   5.14s (1.00x)
+distributed  workers= 1  end-to-end   8.71s  speedup 0.59x  parallel phase   6.25s (0.82x)
+distributed  workers= 2  end-to-end   5.94s  speedup 0.87x  parallel phase   3.42s (1.51x)
+distributed  workers= 4  end-to-end   4.40s  speedup 1.17x  parallel phase   2.00s (2.57x)
+distributed  workers= 8  end-to-end   3.64s  speedup 1.43x  parallel phase   1.26s (4.10x)

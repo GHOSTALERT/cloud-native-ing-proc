@@ -1,0 +1,13 @@
+# local environment and tools (recreate with the setup steps in the guide)
+.venv/
+.tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# generated at run time
+output/
+samples/synthetic_8192.png
+
+# LibreOffice lock files
+.~lock.*#

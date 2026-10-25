@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parallel Image Processing</title>
+<style>
+  :root { --bg:#f4f6f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e4e7ec; --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:#0f172a; color:#fff; padding:14px 0; }
+  header .in, main { max-width:1200px; margin:0 auto; padding-inline:16px; }
+  header h1 { font-size:18px; margin:0; } header p { margin:2px 0 0; color:#94a3b8; font-size:13px; }
+  main { padding-block:20px; }
+  .grid { display:grid; grid-template-columns: 1fr 330px; gap:16px; align-items:start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 12px; }
+  form { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:4px; }
+  input, select, button { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); }
+  button { background:var(--accent); color:#fff; border:none; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  .bar { height:10px; background:var(--line); border-radius:5px; overflow:hidden; margin:16px 0 8px; }
+  .bar > div { height:100%; width:0; background:var(--accent); transition:width .2s; }
+  .bar.done > div { background:var(--ok); }
+  #status { min-height:21px; }
+  .images { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+  .images figure { margin:0; } .images img { width:100%; min-height:120px; border:1px solid var(--line); border-radius:6px; background:#e5e7eb; display:block; }
+  figcaption { font-size:12px; color:var(--muted); margin-top:4px; }
+  table { width:100%; border-collapse:collapse; } td, th { padding:4px 6px 4px 0; border-bottom:1px solid var(--line); text-align:left; }
+  th { font-size:12px; color:var(--muted); font-weight:500; }
+  .kv td:last-child { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; background:#e0e7ff; color:#3730a3; }
+  .pill.done { background:#dcfce7; color:#166534; } .pill.failed { background:#fee2e2; color:#991b1b; } .pill.running { background:#fef3c7; color:#92400e; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--ok); margin-right:6px; }
+  .dot.dead { background:var(--bad); }
+  a { color:var(--accent); }
+  .links { margin-top:8px; font-size:13px; }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <h1>Cloud-Native Parallel Image Processing</h1>
+  <p>Upload → partition into tiles → Redis task queue → parallel workers → aggregation → reconstructed image</p>
+</div></header>
+<main>
+  <div class="grid">
+    <div>
+      <section class="card">
+        <h2>New job</h2>
+        <form id="f">
+          <label>Image <input type="file" name="file" id="file" accept="image/*" required></label>
+          <label>Operation <select name="op" id="op"></select></label>
+          <label>Tile size (px) <input type="number" name="tile_size" value="512" min="32" max="8192" step="32"></label>
+          <button id="go">Process</button>
+        </form>
+        <div class="bar" id="barwrap"><div id="bar"></div></div>
+        <div id="status">No job yet.</div>
+        <div class="images">
+          <figure><img id="orig" alt=""><figcaption>Original</figcaption></figure>
+          <figure><img id="res" alt=""><figcaption id="rescap">Result</figcaption></figure>
+        </div>
+        <div class="links" id="links"></div>
+      </section>
+      <section class="card">
+        <h2>Recent jobs</h2>
+        <table id="jobs"></table>
+      </section>
+    </div>
+    <aside>
+      <section class="card">
+        <h2>Job timings</h2>
+        <table class="kv" id="timings"></table>
+      </section>
+      <section class="card">
+        <h2>Cluster</h2>
+        <table class="kv" id="metrics"></table>
+      </section>
+      <section class="card">
+        <h2>Workers</h2>
+        <table id="workers"></table>
+      </section>
+    </aside>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const kv = (el, pairs) => el.innerHTML = pairs.map(([k, v]) => `<tr><td>${k}</td><td>${v ?? '—'}</td></tr>`).join('');
+const sec = v => v == null ? null : v.toFixed(3) + ' s';
+let current = null;
+
+fetch('ops').then(r => r.json()).then(ops => {
+  $('op').innerHTML = Object.entries(ops).map(([k, d]) => `<option value="${k}" title="${esc(d)}">${k}</option>`).join('');
+});
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  $('orig').src = URL.createObjectURL(fd.get('file'));
+  $('res').removeAttribute('src');
+  $('links').innerHTML = '';
+  $('go').disabled = true;
+  $('status').textContent = 'Uploading and partitioning…';
+  try {
+    const r = await fetch('jobs', { method: 'POST', body: fd });
+    const job = await r.json();
+    if (!r.ok) throw new Error(job.detail || r.statusText);
+    history.replaceState(null, '', '?job=' + job.id);
+    show(job.id);
+  } catch (err) {
+    $('status').textContent = 'Error: ' + err.message;
+    $('go').disabled = false;
+  }
+});
+
+async function show(id) {
+  current = id;
+  const r = await fetch('jobs/' + id);
+  if (!r.ok) { $('status').textContent = 'Job ' + id + ' not found.'; return; }
+  const job = await r.json();
+  if (!$('orig').getAttribute('src')) $('orig').src = `jobs/${id}/preview`;
+  $('bar').style.width = (job.progress * 100) + '%';
+  $('barwrap').classList.toggle('done', job.status === 'done');
+  $('status').innerHTML = `Job <b>${job.id}</b> <span class="pill ${job.status}">${job.status}</span> &nbsp; ${job.done} / ${job.total} tiles` +
+    ` &nbsp;·&nbsp; ${job.retries} retr${job.retries === 1 ? 'y' : 'ies'}` + (job.error ? ` — ${esc(job.error)}` : '');
+  const t = job.timings;
+  kv($('timings'), [['Image', `${job.width} × ${job.height}`], ['Operation', job.op], ['Tiles', `${job.total} × ${job.tile_size}px`],
+    ['Upload decode + partition', sec(t.partition_s)], ['Queue wait', sec(t.queue_wait_s)],
+    ['Parallel processing', sec(t.processing_s)], ['Compute (sum of tiles)', sec(t.compute_s)],
+    ['Aggregation', sec(t.aggregate_s)], ['End-to-end', sec(t.total_s)]]);
+  if (job.status === 'done') {
+    $('res').src = `jobs/${id}/result?max_side=1200`;
+    $('rescap').textContent = `Result (${job.op})`;
+    $('links').innerHTML = `Full resolution: <a href="jobs/${id}/result">PNG</a> · <a href="jobs/${id}/result?format=jpg">JPG</a> · <a href="jobs/${id}" target="_blank">job JSON</a>`;
+    $('go').disabled = false;
+  } else if (job.status === 'failed') {
+    $('go').disabled = false;
+  } else if (current === id) {
+    setTimeout(() => show(id), 300);
+  }
+}
+
+async function refresh() {
+  try {
+    const m = await (await fetch('metrics')).json();
+    kv($('metrics'), [['Pending tasks', m.pending], ['In progress', m.processing], ['Tiles processed', m.tasks_done],
+      ['Retries (fault recovery)', m.retries], ['Active workers', m.active_workers]]);
+    $('workers').innerHTML = '<tr><th>Worker</th><th class="num">Tiles</th><th class="num">Busy</th></tr>' +
+      m.workers.map(w => `<tr><td><span class="dot ${w.alive ? '' : 'dead'}"></span>${esc(w.id)}</td><td class="num">${w.tiles}</td><td class="num">${w.busy_s.toFixed(1)} s</td></tr>`).join('');
+    const jobs = await (await fetch('jobs?limit=8')).json();
+    $('jobs').innerHTML = '<tr><th>Job</th><th>Op</th><th>Size</th><th>Status</th><th class="num">Tiles</th><th class="num">Retries</th><th class="num">Total</th></tr>' +
+      jobs.map(j => `<tr><td><a href="?job=${j.id}">${j.id}</a></td><td>${j.op}</td><td>${j.width}×${j.height}</td><td><span class="pill ${j.status}">${j.status}</span></td>` +
+        `<td class="num">${j.done}/${j.total}</td><td class="num">${j.retries}</td><td class="num">${j.timings.total_s != null ? j.timings.total_s.toFixed(2) + ' s' : '—'}</td></tr>`).join('');
+  } catch {}
+  setTimeout(refresh, 1000);
+}
+refresh();
+const initial = new URLSearchParams(location.search).get('job');
+if (initial) show(initial);
+</script>
+</body>
+</html>

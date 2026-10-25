@@ -1,0 +1,30 @@
+$ python scripts/load_test.py --api http://192.168.49.2:30080 --jobs 4 --op bilateral --image samples/synthetic_8192.png
+submitting 4 x bilateral jobs to http://192.168.49.2:30080 ...
+queued 1024 tiles in 5.0s: d2afe7de8145, 5efcb6e3d504, 46ea0aadcacb, 3d0a43895360
+
+  time  pending  in-progress  workers  retries  jobs done
+  5.0s      940            1        1        0  0/4
+  6.0s      908            1        1        0  0/4
+  7.0s      746            7        8        0  0/4
+  8.0s      563            7        8        0  1/4
+  9.1s      381            6        8        0  1/4
+ 10.1s      180            7        8        0  2/4
+ 11.1s        0            0        8        0  3/4
+ 12.1s        0            0        8        0  4/4
+
+all jobs finished in 12.1s
+  d2afe7de8145: done, 256 tiles, 0 retries, end-to-end 8.0894s
+  5efcb6e3d504: done, 256 tiles, 0 retries, end-to-end 8.5595s
+  46ea0aadcacb: done, 256 tiles, 0 retries, end-to-end 7.3666s
+  3d0a43895360: done, 256 tiles, 0 retries, end-to-end 6.7949s
+
+$ kubectl -n imgframe get pods -l app=worker   # at peak
+NAME                     READY   STATUS    RESTARTS   AGE
+worker-d44777889-686qh   1/1     Running   0          1s
+worker-d44777889-9krdx   1/1     Running   0          1s
+worker-d44777889-cnqpl   1/1     Running   0          1s
+worker-d44777889-lkh8f   1/1     Running   0          1s
+worker-d44777889-lswcr   1/1     Running   0          1s
+worker-d44777889-rngfw   1/1     Running   0          1s
+worker-d44777889-vlgrq   1/1     Running   0          1s
+worker-d44777889-wqxgl   1/1     Running   0          89s
