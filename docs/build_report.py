@@ -113,8 +113,8 @@ def n_tests():
     return 0
 
 
-def autoscale_summary():
-    d = RES / "autoscale"
+def autoscale_summary(folder="autoscale"):
+    d = RES / folder
     runs = {}
     for f in sorted(d.glob("*_run*.json")) if d.exists() else []:
         s = json.loads(f.read_text())["summary"]
@@ -238,6 +238,7 @@ def build() -> Path:
     old = load("results.json")
     prof = json.loads((ROOT / "imgframe" / "profiles.json").read_text())
     auto = autoscale_summary()
+    auto_before = autoscale_summary("autoscale_before_idle_fix")
     tests = n_tests()
     redis_m, s3_m = sto[0], sto[1]
     cop = {k: v * 1e9 for k, v in prof["ops"].items()}
@@ -283,8 +284,10 @@ def build() -> Path:
         f"{eng['mape_pct']:.0f} % MAPE versus {eng['mape_simple_pct']:.0f} % for a linear model, and it turns "
         f"the 16× slowdown of naively tiled grayscale into a {eng_rows['grayscale']['plan_speedup']:.2f}× "
         "result. (4) A work-aware autoscaler sizes the worker pool from queued compute-seconds and a latency "
-        "target. On a replayed trace it met a 30 s latency target for every job with 9 % fewer worker pod-seconds "
-        "than KEDA, while the CPU-based HPA met it for only 54 % of jobs. Neural operations "
+        "target. On a replayed trace it met a 30 s latency target for every job with "
+        f"{100 * (1 - auto['work']['pod_seconds'][0] / auto['keda']['pod_seconds'][0]):.0f} % fewer worker "
+        "pod-seconds than KEDA, while the CPU-based HPA met it for only "
+        f"{auto['hpa']['within_target_pct'][0]:.0f} % of jobs. Neural operations "
         f"reach only {hed_peak:.1f}× (HED) and {sr_peak:.1f}× (Real-ESRGAN) on a 16-thread laptop because they are "
         "memory-bandwidth bound, a result the planner models explicitly.")
     para = r.p("", indent=False, size=9, after=4)
@@ -496,8 +499,12 @@ def build() -> Path:
     r.equation("*n* = clamp(max(⌈*W* / (*D*·*u*)⌉, ⌈λ/*u*⌉), *n*_{min}, *n*_{max})")
     r.t("with *D* = *L* − *t*_{start} the time left to drain the queue once a pod has started (latency target "
         "*L* = 30 s, pod start-up *t*_{start} = 5 s) and *u* = 0.8 the target utilisation. The first term drains "
-        "the backlog within the latency target; the second keeps up with the steady arrival rate. Scale-down is "
-        "delayed by a 30 s stabilisation window, as in the baselines. Unlike a queue-length rule, ten HED tiles "
+        "the backlog within the latency target; the second keeps up with the steady arrival rate. Scale-ups are "
+        "applied at once. A reduction is applied after a 30 s stabilisation window, as in the baselines, with one "
+        "exception: when *W* < 0.05 s (nothing queued or in progress) for 10 s (`IDLE_SCALE_DOWN_S`), the pool "
+        "drops straight to *n*_{min}. An empty queue is exact information, unlike the slowly decaying EMA λ, "
+        "and a new burst is answered by an immediate scale-up whose start-up time is already budgeted in *D*. "
+        "Unlike a queue-length rule, ten HED tiles "
         "and ten Canny tiles produce very different *W*, so the pool reacts to how much work is waiting.")
     r.t("**Baselines.** *HPA*: CPU utilisation target 70 % of the worker request (`autoscaling/v2`, 30 s "
         "scale-down window) [19]. *KEDA* 2.21 [18]: Redis Lists scaler on `queue:pending`, 16 tiles per replica, "
@@ -607,7 +614,7 @@ def build() -> Path:
         ], "Autoscaler comparison on Minikube (mean ± s.d.)", [2.8, *[1.95] * len(auto)])
         r.figx("fig_autoscale.png", "Replica count (line) and queued work-seconds (shaded) during one run of "
               "each scaler; ticks mark job arrivals (red = expensive).", 3.2, wide=True)
-        for text in autoscale_discussion(auto):
+        for text in autoscale_discussion(auto, auto_before.get("work")):
             r.t(text)
     else:
         r.box("Autoscaler results not found: run scripts/run_autoscale_comparison.sh", fill="FEF3C7")
@@ -615,11 +622,11 @@ def build() -> Path:
     r.ieee_h2("Correctness and Testing")
     r.t(f"The test suite has {tests} tests (all pass): tiling and exact reconstruction for every classical "
         "operation, the reliable queue (claim, duplicate completion, lease expiry, retries), end-to-end HTTP "
-        "runs including a crashed worker, and 16 new tests for the upgrades: S3-mode jobs keep pixels out of "
+        "runs including a crashed worker, and 17 new tests for the upgrades: S3-mode jobs keep pixels out of "
         "Redis, proxy and redirect delivery, queue-depth back-pressure, crash recovery in S3 mode, stride-aligned "
         "halos, scale-aware stitching, streamed TIFF equal to in-memory output, HED tiled vs whole (PSNR), "
         "Real-ESRGAN end to end, planner decisions, the online cost EMA, exact work-seconds accounting with "
-        "retries and duplicates, and the work-aware replica rule. "
+        "retries and duplicates, the work-aware replica rule and the idle scale-down. "
         "Fault tolerance from v1 still holds: a worker killed mid-job on Kubernetes was replaced and its leased "
         "tiles were re-run without loss.")
 
@@ -719,6 +726,7 @@ def build() -> Path:
         ("PROFILE_EMA", "0.05", "Weight of online cost updates"),
         ("POLICY", "work", "Autoscaler policy: work or queue"),
         ("LATENCY_TARGET_S, TARGET_UTILIZATION, POD_STARTUP_S", "30, 0.8, 5", "Work-aware scaler parameters"),
+        ("SCALE_DOWN_DELAY, IDLE_SCALE_DOWN_S", "30, 10", "Delay before a reduction; delay before an idle pool drops to MIN"),
     ], None, widths_cm=[6.2, 2.4, 9.2], size=8, ieee=False, header_fill="334155", align_cols=[L, L, L])
     r.page_numbers()
     out = DOCS / "Project_Report_IEEE.docx"
@@ -726,7 +734,7 @@ def build() -> Path:
     return out
 
 
-def autoscale_discussion(auto):
+def autoscale_discussion(auto, before=None):
     """Narrative for the autoscaling results, derived from the measured numbers."""
     if not {"hpa", "keda", "work"} <= auto.keys():
         return []
@@ -738,20 +746,33 @@ def autoscale_discussion(auto):
         f"{h['p95_s'][0]:.0f} s. CPU utilisation is averaged over a metrics window and the worker request is "
         f"large, so its first scale-up came {h['first_scale_up_s'][0]:.0f} s after the first arrival, by which "
         "time the expensive burst was mostly over.",
-        f"**KEDA** and the **work-aware** scaler both met the target for every job. KEDA had the lower p95 "
-        f"({k['p95_s'][0]:.1f} s vs {w['p95_s'][0]:.1f} s); the work-aware scaler used {saving:.0f} % fewer "
+        f"**KEDA** and the **work-aware** scaler both met the target for every job, with similar p95 latency "
+        f"({k['p95_s'][0]:.1f} ± {k['p95_s'][1]:.1f} s vs {w['p95_s'][0]:.1f} ± {w['p95_s'][1]:.1f} s); "
+        f"the work-aware scaler used {saving:.0f} % fewer "
         f"worker pod-seconds ({w['pod_seconds'][0]:.0f} vs {k['pod_seconds'][0]:.0f}). The "
         "replica traces show why: KEDA scales up within 4 s of the *cheap* bursts, because 10 grayscale/Canny jobs queue "
         "hundreds of tiles, although those jobs finish in about two seconds on one worker. The work-aware scaler "
         f"sees only a few seconds of queued work there and stays at one replica; its first scale-up "
         f"({w['first_scale_up_s'][0]:.0f} s) is the start of the expensive burst, which it meets with 5–7 workers.",
-        "The work-aware scaler is not optimal yet. After the queue drains it keeps its peak replica count for "
-        "about 20 s more, because the arrival-rate term λ is an EMA that decays slowly and the 30 s scale-down "
-        "delay starts only after demand falls; most of its remaining pod-seconds are spent there. A faster "
-        "decay of λ, or scaling down in steps, is the obvious next improvement. With one trace on one host the "
-        "differences between KEDA and the work-aware scaler are modest; the clear result is that scaling on "
-        "work avoids reacting to cheap tile counts while still meeting the latency target.",
+        *idle_paragraph(w, k, before),
     ]
+
+def idle_paragraph(w, k, before):
+    if not before:
+        return []
+    cut = 100 * (1 - w["pod_seconds"][0] / before["pod_seconds"][0])
+    return [
+        "**Idle scale-down.** Our first version kept its peak replica count for about 20 s after the queue "
+        "drained: the arrival-rate EMA λ decays slowly and every reduction waited the full 30 s window. Adding "
+        f"the idle rule (Sec. VIII) cut worker pod-seconds from {before['pod_seconds'][0]:.0f} ± "
+        f"{before['pod_seconds'][1]:.0f} to {w['pod_seconds'][0]:.0f} ± {w['pod_seconds'][1]:.0f} "
+        f"({cut:.0f} % less), while p95 latency only moved from {before['p95_s'][0]:.1f} s to {w['p95_s'][0]:.1f} s, "
+        f"with {w['within_target_pct'][0]:.0f} % of jobs still within the target (3 runs each, same trace). "
+        "With one trace on one host the differences between KEDA and the work-aware scaler should be read as "
+        "indicative; the robust result is that scaling on work avoids reacting to cheap tile counts while "
+        "still meeting the latency target.",
+    ]
+
 
 if __name__ == "__main__":
     path = build()

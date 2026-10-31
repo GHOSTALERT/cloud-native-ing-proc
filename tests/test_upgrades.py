@@ -16,7 +16,7 @@ from imgframe.config import settings
 from imgframe.models import available
 from imgframe.objstore import MemoryObjStore
 from imgframe.pipeline import partition, run_sequential, run_tiled
-from imgframe.store import WORK, Store
+from imgframe.store import WORK, WORK_ADDED, Store
 from imgframe.tiling import decode_image, encode_png, plan_tiles, reconstruct, split_image, stream_tiled_tiff
 from worker.main import Worker
 
@@ -251,3 +251,25 @@ def test_work_aware_scaler_ignores_task_count(store, image):
     assert work.tick(now=0) == 1            # 0.26 s of work -> one worker is plenty
     store.r.set(WORK, 200.0)                # 200 s of expensive work queued
     assert work.tick(now=3) == 8
+
+
+def test_work_aware_scaler_drops_to_min_soon_after_idle(store):
+    class FakeApps:
+        replicas = 1
+        def read_namespaced_deployment_scale(self, *_):
+            return type("S", (), {"spec": type("Sp", (), {"replicas": self.replicas})})
+        def patch_namespaced_deployment_scale(self, _n, _ns, body):
+            self.replicas = body["spec"]["replicas"]
+
+    from autoscaler import main as am
+    apps = FakeApps()
+    sc = Autoscaler(store, apps, "work")
+    store.r.set(WORK, 150.0)
+    store.r.set(WORK_ADDED, 150.0)
+    assert sc.tick(now=0) == 7                      # ceil(150 / (30 * 0.8)) = 7
+    store.r.set(WORK, 0.0)                          # queue drained; rate EMA still high
+    assert sc.tick(now=3) == apps.replicas          # idle, but not for long enough yet
+    assert apps.replicas > 1
+    assert sc.tick(now=3 + am.IDLE_SCALE_DOWN_S) == 1   # idle long enough: straight to MIN
+    store.r.set(WORK, 150.0)                        # new burst: scale up at once
+    assert sc.tick(now=20) > 1

@@ -1,9 +1,0 @@
-$ .venv/bin/python -m benchmark.bench_distributed --workers 1 2 4 8 --op bilateral --size 8192
-bilateral on 8192x8192: sequential whole-image 5.322s
-
-  1 workers: end-to-end  8.878s (0.60x)  |  parallel phase  6.354s (0.84x)  |  partition 1.4746s, aggregate 0.4933s, 2.27 cores busy
-  2 workers: end-to-end  5.830s (0.91x)  |  parallel phase  3.425s (1.55x)  |  partition 1.4502s, aggregate 0.4611s, 2.74 cores busy
-  4 workers: end-to-end  4.554s (1.17x)  |  parallel phase  1.979s (2.69x)  |  partition 1.4658s, aggregate 0.5737s, 3.46 cores busy
-  8 workers: end-to-end  3.798s (1.40x)  |  parallel phase  1.247s (4.27x)  |  partition 1.4758s, aggregate 0.5806s, 4.43 cores busy
-
-wrote benchmark/results/distributed_bilateral.csv and .json

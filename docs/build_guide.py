@@ -114,7 +114,7 @@ def build() -> Path:
         ["`k8s/`", "Kubernetes manifests; `optional/` holds the HPA and KEDA baselines"],
         ["`deploy/aws/`", "S3 bucket policy, IAM policies, lifecycle rule, KMS setup script, IRSA service accounts"],
         ["`docs/`", "report, slides, this guide, figures and the scripts that build them"],
-        ["`tests/`", "pytest suite (42 tests)"],
+        ["`tests/`", "pytest suite (43 tests)"],
     ], "Repository layout", [3.2, 13.3])
 
     # ---------------------------------------------------------------- 2
@@ -156,8 +156,8 @@ def build() -> Path:
         "weights the `hed` and `superres` operations are simply hidden from the UI and `/ops`.")
     g.sub("Sample images and the test suite")
     g.code(".venv/bin/python scripts/make_samples.py     # samples/astronaut_2048.png, synthetic_8192.png\n"
-           ".venv/bin/python -m pytest -q                # 42 passed")
-    g.figx(SHOTS / "term_tests_v2.png", "The test suite: 42 tests, including S3 mode, neural tiling, planner and "
+           ".venv/bin/python -m pytest -q                # 43 passed")
+    g.figx(SHOTS / "term_tests_v2.png", "The test suite: 43 tests, including S3 mode, neural tiling, planner and "
           "work accounting.", max_h_in=3.6)
 
     # ---------------------------------------------------------------- 4
@@ -300,7 +300,7 @@ def build() -> Path:
         ["Planner on the full framework", "`python -m benchmark.bench_planner --cluster --workers 8`", "planner_cluster.json"],
         ["Redis vs S3 storage study", "`python -m benchmark.bench_storage`", "storage_study.json"],
         ["Autoscaler comparison (Minikube)", "`bash scripts/run_autoscale_comparison.sh 3`", "autoscale/<scaler>_run<N>.json"],
-        ["Screenshots", "`python scripts/capture_v2.py --k8s`", "docs/screenshots/*_v2*.png"],
+        ["Screenshots", "`python scripts/capture_screenshots.py --k8s`", "docs/screenshots/*_v2*.png"],
         ["All report figures", "`python docs/make_figures.py`", "docs/figures/*.png"],
         ["Report, slides, this guide", "`python docs/build_report.py; python docs/build_slides.py; python docs/build_guide.py`", "docs/*.docx, .pdf, .pptx"],
     ], "Commands that regenerate each result (run from the repository root with .venv/bin/python)", [4.3, 6.6, 5.6])
@@ -351,6 +351,7 @@ def build() -> Path:
         ["`POLICY`", "work", "autoscaler rule: `work` or `queue`"],
         ["`LATENCY_TARGET_S`, `TARGET_UTILIZATION`, `POD_STARTUP_S`", "30, 0.8, 0", "work-aware rule parameters"],
         ["`MIN_WORKERS`, `MAX_WORKERS`, `SCALE_DOWN_DELAY`", "1, 8, 30", "autoscaler bounds and scale-down delay"],
+        ["`IDLE_SCALE_DOWN_S`", "10", "work mode: once nothing is queued or running for this long, drop to MIN_WORKERS"],
     ], "Environment variables", [6.0, 3.4, 7.1])
 
     # ---------------------------------------------------------------- 13

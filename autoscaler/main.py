@@ -13,7 +13,11 @@ POLICY=queue: the original rule, replicas = clamp(ceil(depth / TASKS_PER_WORKER)
 
 Every POLL_SECONDS the policy is evaluated. Scale-ups apply immediately;
 scale-downs wait for SCALE_DOWN_DELAY seconds of lower demand so pods are not
-churned between jobs.
+churned between jobs. In work mode an *idle* cluster (no work queued or in
+progress, W ~ 0) is certain information, not a noisy estimate: after
+IDLE_SCALE_DOWN_S seconds of idleness the pool drops straight to MIN_WORKERS,
+ignoring the slowly decaying arrival-rate EMA. A new burst still scales up at
+once, so the only risk is one pod start-up, which D already budgets for.
 """
 import logging
 import math
@@ -36,6 +40,8 @@ LATENCY_TARGET_S = float(os.environ.get("LATENCY_TARGET_S", "30"))
 TARGET_UTILIZATION = float(os.environ.get("TARGET_UTILIZATION", "0.8"))
 POD_STARTUP_S = float(os.environ.get("POD_STARTUP_S", "0"))
 RATE_EMA = float(os.environ.get("RATE_EMA", "0.3"))
+IDLE_SCALE_DOWN_S = float(os.environ.get("IDLE_SCALE_DOWN_S", "10"))
+IDLE_WORK_S = 0.05   # below this many queued compute-seconds the cluster counts as idle
 
 
 def desired_replicas(depth: int, min_w: int = MIN_WORKERS, max_w: int = MAX_WORKERS,
@@ -61,6 +67,8 @@ class Autoscaler:
         self.apps = apps_api
         self.policy = policy
         self.low_since: float | None = None
+        self.idle_since: float | None = None
+        self.work = None
         self.rate = 0.0
         self._last: tuple[float, float] | None = None  # (time, work_added)
 
@@ -83,7 +91,7 @@ class Autoscaler:
             depth = self.store.queue_depth()
             return desired_replicas(depth), f"queue depth {depth}"
         self._update_rate(now)
-        work = self.store.work_seconds()
+        work = self.work = self.store.work_seconds()
         return work_replicas(work, self.rate), f"work {work:.1f}s, rate {self.rate:.2f}s/s"
 
     def tick(self, now: float | None = None) -> int:
@@ -95,6 +103,16 @@ class Autoscaler:
             self.scale(want)
             self.low_since = None
             return want
+        if self.policy == "work" and self.work is not None and self.work < IDLE_WORK_S:
+            self.idle_since = self.idle_since or now
+            if have > MIN_WORKERS and now - self.idle_since >= IDLE_SCALE_DOWN_S:
+                log.info("%s: idle for %.0fs, scaling down %d -> %d", why, now - self.idle_since, have,
+                         MIN_WORKERS)
+                self.scale(MIN_WORKERS)
+                self.low_since = None
+                return MIN_WORKERS
+        else:
+            self.idle_since = None
         if want < have:
             self.low_since = self.low_since or now
             if now - self.low_since >= SCALE_DOWN_DELAY:
@@ -121,8 +139,8 @@ def main() -> None:
                  NAMESPACE, DEPLOYMENT, MIN_WORKERS, MAX_WORKERS, TASKS_PER_WORKER)
     else:
         log.info("autoscaling %s/%s between %d and %d replicas (work-aware: latency target %.0fs, "
-                 "utilization %.2f)", NAMESPACE, DEPLOYMENT, MIN_WORKERS, MAX_WORKERS,
-                 LATENCY_TARGET_S, TARGET_UTILIZATION)
+                 "utilization %.2f, idle scale-down %.0fs)", NAMESPACE, DEPLOYMENT, MIN_WORKERS, MAX_WORKERS,
+                 LATENCY_TARGET_S, TARGET_UTILIZATION, IDLE_SCALE_DOWN_S)
     while True:
         try:
             scaler.tick()

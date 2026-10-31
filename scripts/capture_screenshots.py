@@ -1,19 +1,17 @@
-"""Capture the screenshots and figures used in the project report.
+"""Capture the screenshots used in the run guide (docs/screenshots/*_v2*.png).
 
-Starts a real local stack (redis-server + API + workers), drives the web UI
-with headless Firefox (Selenium), runs the demos/tests/benchmarks and renders
-their real terminal output as images.
+    python scripts/capture_screenshots.py            # tests, UI (HED + super-res), API calls
+    python scripts/capture_screenshots.py --k8s      # also `kubectl get` of the Minikube deployment
 
-    python scripts/capture_screenshots.py              # everything
-    python scripts/capture_screenshots.py --skip-bench # reuse benchmark logs
-
-Output: docs/screenshots/*.png, docs/logs/*.txt, samples/*.png
+Starts its own Redis (port 6510), MinIO (9010), API (8300) and 4 workers, so it does
+not disturb a running deployment. Drives the web UI with headless Firefox (Selenium)
+and renders real terminal output as images. Output: docs/screenshots/, docs/logs/.
 """
 import argparse
 import html
+import json
 import os
 import re
-import signal
 import subprocess
 import sys
 import time
@@ -24,18 +22,12 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import cv2  # noqa: E402
-import numpy as np  # noqa: E402
 
 import run_local  # noqa: E402
-from imgframe.ops import get_op  # noqa: E402
-from imgframe.sample import synthetic_image  # noqa: E402
-from imgframe.tiling import plan_tiles  # noqa: E402
 
 SHOTS = ROOT / "docs" / "screenshots"
 LOGS = ROOT / "docs" / "logs"
 SAMPLES = ROOT / "samples"
-PY = sys.executable
-
 
 # --------------------------------------------------------------- browser
 def browser(width=1400, height=1000):
@@ -133,202 +125,80 @@ def terminal_multi(driver, name: str, segments: list[tuple[str, str]], max_lines
     shot(driver, name)
 
 
-# -------------------------------------------------------------- figures
-def make_samples() -> tuple[Path, Path]:
-    SAMPLES.mkdir(exist_ok=True)
-    photo = SAMPLES / "astronaut_2048.png"
-    if not photo.exists():
-        from skimage import data  # public-domain NASA photo bundled with scikit-image
-        img = cv2.cvtColor(data.astronaut(), cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(photo), cv2.resize(img, (2048, 2048), interpolation=cv2.INTER_CUBIC))
-    big = SAMPLES / "synthetic_8192.png"
-    if not big.exists():
-        cv2.imwrite(str(big), synthetic_image(8192, 8192), [cv2.IMWRITE_PNG_COMPRESSION, 1])
-    return photo, big
 
-
-def tiling_figure(photo: Path) -> None:
-    """Visualise partitioning: tile cores (green) and one tile's halo (orange)."""
-    img = cv2.resize(cv2.imread(str(photo)), (1024, 1024), interpolation=cv2.INTER_AREA)
-    scale = 1024 / 2048
-    specs = plan_tiles(2048, 2048, 256, get_op("canny").halo * 3)  # halo exaggerated to be visible
-    out = img.copy()
-    for s in specs:
-        cv2.rectangle(out, (int(s.x0 * scale), int(s.y0 * scale)),
-                      (int(s.x1 * scale) - 1, int(s.y1 * scale) - 1), (80, 220, 80), 2)
-        cv2.putText(out, str(s.index), (int(s.x0 * scale) + 6, int(s.y0 * scale) + 22),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 220, 80), 2)
-    s = specs[27]
-    cv2.rectangle(out, (int(s.hx0 * scale), int(s.hy0 * scale)),
-                  (int(s.hx1 * scale), int(s.hy1 * scale)), (0, 140, 255), 3)
-    cv2.imwrite(str(SHOTS / "fig_tiling.png"), out)
-    print("  saved docs/screenshots/fig_tiling.png")
-
-
-def result_figures(photo: Path) -> None:
-    from imgframe.pipeline import run_tiled
-
-    def label(img, text):
-        img = img.copy()
-        cv2.putText(img, text, (12, 34), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 5)
-        cv2.putText(img, text, (12, 34), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-        return img
-
-    img = cv2.resize(cv2.imread(str(photo)), (1024, 1024), interpolation=cv2.INTER_AREA)
-    cells = [label(cv2.resize(img, (512, 512), interpolation=cv2.INTER_AREA), "original")]
-    for op in ("grayscale", "canny", "sobel", "bilateral", "sharpen"):
-        out = run_tiled(img, op, 256, workers=4)            # tiled + parallel, then stitched
-        if op == "canny":
-            out = cv2.dilate(out, np.ones((2, 2), np.uint8))  # thicken 1-px edges for print
-        if out.ndim == 2:
-            out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
-        cells.append(label(cv2.resize(out, (512, 512), interpolation=cv2.INTER_AREA), op))
-    grid = np.vstack([np.hstack(cells[:3]), np.hstack(cells[3:])])
-    cv2.imwrite(str(SHOTS / "fig_operations.png"), grid)
-    # Full-resolution Canny around tile boundaries (red lines): no seams at the joins.
-    full = cv2.imread(str(photo))
-    edges = run_tiled(full, "canny", 256, workers=4)
-    crop = cv2.cvtColor(edges[512:1280, 640:1408], cv2.COLOR_GRAY2BGR)
-    for x in (768 - 640, 1024 - 640, 1280 - 640):
-        cv2.line(crop, (x, 0), (x, crop.shape[0]), (0, 0, 255), 1)
-    for y in (768 - 512, 1024 - 512):
-        cv2.line(crop, (0, y), (crop.shape[1], y), (0, 0, 255), 1)
-    cv2.imwrite(str(SHOTS / "fig_seamless.png"), crop)
-    print("  saved docs/screenshots/fig_operations.png, fig_seamless.png")
-
-
-def architecture_figure(driver) -> None:
-    svg = (ROOT / "docs" / "architecture.svg").read_text()
-    page = f'<html><body style="margin:0;background:#fff">{svg}</body></html>'
-    tmp = Path(os.environ.get("TMPDIR", "/tmp")) / "arch.html"
-    tmp.write_text(page)
-    driver.set_window_size(1300, 700)
-    driver.get(tmp.as_uri())
-    shot(driver, "fig_architecture")
-
-
-# ------------------------------------------------------------- web UI
-def ui_shots(driver, photo: Path, big: Path) -> None:
+def ui(driver, tmp: Path) -> None:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import Select
 
-    redis_url = run_local.start_redis(6500)
-    api, workers, url = run_local.launch(4, 8200, redis_url,
-                                         extra_env={"LEASE_SECONDS": "5", "HEARTBEAT_SECONDS": "1"})
+    photo = SAMPLES / "astronaut_2048.png"
+    small = SAMPLES / "astronaut_512.png"   # snap Firefox cannot read /tmp
+    cv2.imwrite(str(small), cv2.resize(cv2.imread(str(photo)), (512, 512), interpolation=cv2.INTER_AREA))
+
+    s3 = run_local.start_minio(9010)
+    redis_url = run_local.start_redis(6510)
+    api, workers, url = run_local.launch(4, 8300, redis_url, extra_env={**s3, "S3_PUBLIC_ENDPOINT": s3["S3_ENDPOINT"]})
     try:
         driver.set_window_size(1400, 1000)
         driver.get(url + "/")
-        wait_for(lambda: "Active workers" in driver.page_source and
-                 driver.find_element(By.ID, "workers").text.count("worker-") == 4)
-        time.sleep(1)
-        shot(driver, "ui_01_idle", full_page=False)
+        wait_for(lambda: driver.find_element(By.ID, "workers").text.count("worker-") == 4)
 
-        def submit(path: Path, op: str):
+        def run(path: Path, op: str, name: str):
             driver.find_element(By.ID, "file").send_keys(str(path))
             Select(driver.find_element(By.ID, "op")).select_by_value(op)
+            t = driver.find_element(By.NAME, "tile_size")
+            t.clear()
+            t.send_keys("auto")
             driver.find_element(By.ID, "go").click()
-
-        def status():
-            return driver.find_element(By.ID, "status").text
-
-        def tiles_done():
-            m = re.search(r"(\d+) / (\d+) tiles", status())
-            return (int(m.group(1)), int(m.group(2))) if m else (0, 1)
-
-        # 1) Canny on a real photo (256 px tiles -> 64 tiles)
-        tile_input = driver.find_element(By.NAME, "tile_size")
-        tile_input.clear()
-        tile_input.send_keys("256")
-        submit(photo, "canny")
-        wait_for(lambda: "done" in status() and driver.execute_script(
-            "const i=document.getElementById('res'); return i.complete && i.naturalWidth > 0"))
-        time.sleep(1.2)
-        shot(driver, "ui_02_canny_done")
-
-        # 2) Large CPU-heavy job: catch it mid-flight, then finished
-        tile_input.clear()
-        tile_input.send_keys("512")
-        submit(big, "bilateral")
-        wait_for(lambda: 0.25 < (lambda d, t: d / t)(*tiles_done()) < 0.8, interval=0.05)
-        shot(driver, "ui_03_bilateral_running", full_page=False)
-        wait_for(lambda: "done" in status(), timeout=300)
-        time.sleep(1.5)
-        shot(driver, "ui_04_bilateral_done")
-
-        # 3) Fault tolerance: SIGKILL a worker while it holds a tile
-        submit(big, "bilateral")
-        wait_for(lambda: tiles_done()[0] >= 40, interval=0.05)
-        workers[0].send_signal(signal.SIGKILL)
-        print("  killed worker-0 (SIGKILL) mid-job")
-        wait_for(lambda: "done" in status(), timeout=300)
-        wait_for(lambda: "dead" in driver.find_element(By.ID, "workers").get_attribute("innerHTML"),
-                 timeout=30)
-        time.sleep(1.2)
-        shot(driver, "ui_05_fault_recovered")
-
-        # 4) API docs (Swagger UI) and raw JSON endpoints
-        driver.get(url + "/docs")
-        try:
-            wait_for(lambda: "POST" in driver.page_source and "/jobs" in driver.page_source, timeout=20)
+            time.sleep(1)
+            wait_for(lambda: "done" in driver.find_element(By.ID, "status").text and driver.execute_script(
+                "const i=document.getElementById('res'); return i.complete && i.naturalWidth > 0"), timeout=300)
             time.sleep(1.5)
-            shot(driver, "ui_06_api_docs", full_page=False)
-        except TimeoutError:
-            print("  (skipped API docs: Swagger UI assets need internet)")
-        driver.get(url + "/metrics")
-        time.sleep(1.5)
-        shot(driver, "ui_07_metrics_json", full_page=False)
+            shot(driver, name)
+
+        run(photo, "hed", "ui_v2_hed_done")
+        run(small, "superres", "ui_v2_superres_done")
+
+        # API walk-through with curl
+        segs = []
+        for cmd in (f"curl -s '{url}/plan?op=hed&width=4096&height=4096' | python3 -m json.tool",
+                    f"curl -s -F file=@samples/astronaut_2048.png -F op=canny -F tile_size=auto {url}/jobs"
+                    " | python3 -m json.tool"):
+            out = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True).stdout
+            segs.append((cmd.replace(url, "http://127.0.0.1:8000"), out))
+        job = json.loads(segs[-1][1])
+        time.sleep(3)
+        cmd = f"curl -s -o /dev/null -w '%{{http_code}} -> %{{redirect_url}}\\n' {url}/jobs/{job['id']}/result"
+        out = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True).stdout
+        segs.append((cmd.replace(url, "http://127.0.0.1:8000"), out))
+        cmd = f"curl -s {url}/metrics | python3 -m json.tool"
+        out = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True).stdout
+        segs.append((cmd.replace(url, "http://127.0.0.1:8000"), out))
+        terminal_multi(driver, "term_api_v2", segs, max_lines=45, width=1150)
     finally:
-        run_local.stop(workers + [api])
+        run_local.stop([api, *workers])
         run_local.stop_redis()
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--skip-bench", action="store_true", help="reuse docs/logs/bench_*.txt")
-    ap.add_argument("--only", choices=["ui", "terminal", "figures"], help="capture one group only")
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--k8s", action="store_true")
+    ap.add_argument("--skip-ui", action="store_true")
     args = ap.parse_args()
-    for d in (SHOTS, LOGS):
-        d.mkdir(parents=True, exist_ok=True)
-
-    photo, big = make_samples()
+    tmp = Path(__import__("tempfile").mkdtemp())
     driver = browser()
     try:
-        if args.only in (None, "figures"):
-            print("figures")
-            tiling_figure(photo)
-            result_figures(photo)
-            architecture_figure(driver)
-        if args.only in (None, "ui"):
-            print("web UI")
-            ui_shots(driver, photo, big)
-        if args.only in (None, "terminal"):
-            print("terminal")
-            cmds = [
-                ("term_01_tests", ".venv/bin/python -m pytest -v -p no:warnings", 70),
-                ("term_02_demo", ".venv/bin/python scripts/run_local.py --workers 4 --demo "
-                                 "--op canny --image samples/astronaut_2048.png --tile-size 256 --port 8201 --redis-port 6501", 40),
-                ("term_03_fault", ".venv/bin/python scripts/run_local.py --workers 4 --demo --kill-worker "
-                                  "--op bilateral --size 4096 --port 8202 --redis-port 6502", 40),
-            ]
-            if not args.skip_bench:
-                cmds += [
-                    ("term_04_bench_local", ".venv/bin/python -m benchmark.bench_local --size 8192 "
-                                            "--ops bilateral canny gaussian_blur --workers 1 2 4 8 16", 40),
-                    ("term_05_bench_distributed", ".venv/bin/python -m benchmark.bench_distributed "
-                                                  "--workers 1 2 4 8 --op bilateral --size 8192", 40),
-                ]
-            for name, cmd, lines in cmds:
-                out = run_cmd(cmd, name)
-                terminal_image(driver, name, cmd, out, max_lines=lines)
-            if args.skip_bench:
-                for name in ("term_04_bench_local", "term_05_bench_distributed"):
-                    log = LOGS / f"{name}.txt"
-                    if log.exists():
-                        cmd, _, out = log.read_text().partition("\n")
-                        terminal_image(driver, name, cmd.removeprefix("$ "), out, max_lines=40)
+        out = run_cmd(".venv/bin/python -m pytest -q", "term_tests_v2")
+        terminal_multi(driver, "term_tests_v2", [(".venv/bin/python -m pytest -q", out)], max_lines=40)
+        if not args.skip_ui:
+            ui(driver, tmp)
+        if args.k8s:
+            out = run_cmd("kubectl -n imgframe get deploy,pods,svc -o wide | cut -c1-150", "k8s_v2_pods")
+            terminal_multi(driver, "k8s_v2_pods", [("kubectl -n imgframe get deploy,pods,svc", out)],
+                           max_lines=40, width=1250)
     finally:
         driver.quit()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

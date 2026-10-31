@@ -492,7 +492,7 @@ def build() -> Path:
          "give-up or delete.")
     card(s, Inches(4.7), Inches(3.15), Inches(3.9), Inches(3.6), "D, u, λ",
          "D = latency target 30 s − pod start-up 5 s.\nu = 0.8 target utilisation.\nλ = EMA of the rate "
-         "at which work arrives.", accent=NAVY)
+         "at which work arrives.\nIdle (W ≈ 0) for 10 s → drop straight to 1 worker.", accent=NAVY)
     card(s, Inches(8.8), Inches(3.15), Inches(3.9), Inches(3.6), "Baselines",
          "HPA: CPU 70 % of request, 30 s scale-down window.\nKEDA 2.21: Redis list length, 16 tiles per "
          "replica, 3 s polling.\nSame 1–8 replicas for all.", accent=AMBER)
@@ -560,7 +560,7 @@ def build() -> Path:
             r.font.size = Pt(14)
             r.font.name = BODY
             r.font.color.rgb = INK
-    stat(s, Inches(8.6), Inches(1.6), Inches(4.3), "42 tests", "all pass · 16 new for the upgrades", vsize=36)
+    stat(s, Inches(8.6), Inches(1.6), Inches(4.3), "43 tests", "all pass · 17 new for the upgrades", vsize=36)
     bullets(s, Inches(8.6), Inches(3.2), Inches(4.3), Inches(3.6), [
         "Seam-free:|tiled = whole image (classical exact; neural ≥ 40 dB seams)",
         "Fault tolerance kept:|killed worker → leased tiles re-run",
@@ -609,9 +609,10 @@ def build() -> Path:
 def autoscale_takeaway(auto):
     h, k, w = auto["hpa"], auto["keda"], auto["work"]
     return (f"HPA is cheapest but reacts after {h['first_scale_up_s']:.0f} s and misses the target. KEDA and "
-            f"work-aware meet it for every job; work-aware uses {100 * (1 - w['pod_seconds'] / k['pod_seconds']):.0f} % "
-            "fewer pod-seconds because it ignores bursts of cheap tiles (KEDA scales up within 4 s of them), at "
-            f"+{w['p95_s'] - k['p95_s']:.1f} s p95. Next fix: scale down faster after the queue drains.")
+            f"work-aware meet it for every job; work-aware uses {100 * (1 - w['pod_seconds'] / k['pod_seconds']):.0f} % "
+            "fewer pod-seconds because it ignores bursts of cheap tiles (KEDA scales up within 4 s of them), with "
+            f"p95 {w['p95_s']:.1f} s vs {k['p95_s']:.1f} s. Dropping to 1 worker 10 s after the queue empties saves a further "
+            "~12 % over our first version.")
 
 if __name__ == "__main__":
     print("wrote", build())

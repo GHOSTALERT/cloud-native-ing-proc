@@ -60,6 +60,7 @@ spec:
             - { name: POD_STARTUP_S, value: "5" }
             - { name: TASKS_PER_WORKER, value: "16" }
             - { name: SCALE_DOWN_DELAY, value: "30" }
+            - { name: IDLE_SCALE_DOWN_S, value: "10" }
           resources:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 200m, memory: 256Mi }
