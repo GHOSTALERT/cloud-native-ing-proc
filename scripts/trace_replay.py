@@ -38,7 +38,7 @@ PHASES = [
     ("cheap burst 2", ["canny", "grayscale"], 10, 1.5),
     ("expensive burst 2", ["hed", "bilateral"], 6, 6.0),
 ]
-IMAGE_SIDE = {"grayscale": 4096, "canny": 4096, "bilateral": 4096, "hed": 1024}
+IMAGE_SIDE = {"grayscale": 4096, "canny": 4096, "bilateral": 4096, "hed": 2048}
 
 
 def make_trace(seed: int) -> list[dict]:
@@ -67,7 +67,7 @@ def main() -> int:
     ap.add_argument("--label", required=True, help="scaler name for the output file (hpa/keda/work)")
     ap.add_argument("--run", type=int, default=1)
     ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--target", type=float, default=60.0, help="per-job latency target (s)")
+    ap.add_argument("--target", type=float, default=30.0, help="per-job latency target (s); = LATENCY_TARGET_S")
     ap.add_argument("--namespace", default="imgframe")
     ap.add_argument("--tail", type=float, default=45.0, help="keep sampling after the last job (s)")
     ap.add_argument("--out", default="benchmark/results/autoscale")

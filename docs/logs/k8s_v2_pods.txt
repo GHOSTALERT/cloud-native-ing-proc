@@ -1,0 +1,19 @@
+$ kubectl -n imgframe get deploy,pods,svc -o wide | cut -c1-150
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES                            SELECTOR
+deployment.apps/api          1/1     1            1           6d17h   api          imgframe:latest                   app=api
+deployment.apps/autoscaler   1/1     1            1           6d17h   autoscaler   imgframe:latest                   app=autoscaler
+deployment.apps/minio        1/1     1            1           35m     minio        cgr.dev/chainguard/minio:latest   app=minio
+deployment.apps/redis        1/1     1            1           6d17h   redis        redis:7.2-alpine                  app=redis
+deployment.apps/worker       1/1     1            1           6d17h   worker       imgframe:latest                   app=worker
+
+NAME                              READY   STATUS    RESTARTS   AGE   IP             NODE       NOMINATED NODE   READINESS GATES
+pod/api-65dd86c956-62xdf          1/1     Running   0          35m   10.244.0.202   minikube   <none>           <none>
+pod/autoscaler-59577884b8-6vw6l   1/1     Running   0          87s   10.244.1.24    minikube   <none>           <none>
+pod/minio-646b956c49-67nmz        1/1     Running   0          35m   10.244.0.194   minikube   <none>           <none>
+pod/redis-5db4fd7d78-zqmbv        1/1     Running   0          35m   10.244.0.193   minikube   <none>           <none>
+pod/worker-5799645bf9-dgfpg       1/1     Running   0          35m   10.244.0.203   minikube   <none>           <none>
+
+NAME            TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE     SELECTOR
+service/api     NodePort    10.96.130.217    <none>        8000:30080/TCP   6d17h   app=api
+service/minio   NodePort    10.100.171.253   <none>        9000:30900/TCP   35m     app=minio
+service/redis   ClusterIP   10.110.118.247   <none>        6379/TCP         6d17h   app=redis
