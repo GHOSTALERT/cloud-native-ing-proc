@@ -1,0 +1,18 @@
+{
+  "hed": {
+    "halo": 98,
+    "theoretical_halo": 98,
+    "criterion": {
+      "seam_psnr_min_db": 40.0,
+      "p999_abs_max": 8.0
+    }
+  },
+  "superres": {
+    "halo": 4,
+    "theoretical_halo": 34,
+    "criterion": {
+      "seam_psnr_min_db": 40.0,
+      "p999_abs_max": 8.0
+    }
+  }
+}

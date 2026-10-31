@@ -11,3 +11,7 @@ samples/synthetic_8192.png
 
 # LibreOffice lock files
 .~lock.*#
+
+# model weights (download with the steps in the guide; HED is converted by scripts/convert_hed.py)
+models/*.onnx
+models/*.caffemodel

@@ -95,7 +95,7 @@ def test_autoscaler_policy(store, image):
             self.replicas = body["spec"]["replicas"]
 
     apps = FakeApps()
-    scaler = Autoscaler(store, apps)
+    scaler = Autoscaler(store, apps, policy="queue")
     from imgframe.pipeline import partition
     big = cv2.resize(image, (2048, 2048))
     store.create_job(op="sobel", height=2048, width=2048, tile_size=128,

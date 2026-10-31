@@ -14,9 +14,9 @@ MP_CONTEXT = multiprocessing.get_context("forkserver")
 
 def partition(img: np.ndarray, op: str, tile_size: int) -> list[tuple[TileSpec, bytes]]:
     """Split an image into encoded halo tiles sized for `op`."""
-    halo = get_op(op).halo
+    o = get_op(op)
     return [(spec, encode_tile(tile))
-            for spec, tile in split_image(img, tile_size, halo)]
+            for spec, tile in split_image(img, tile_size, o.halo, o.align)]
 
 
 def process_tile(op: str, tile_data: bytes) -> tuple[bytes, float]:
@@ -28,9 +28,9 @@ def process_tile(op: str, tile_data: bytes) -> tuple[bytes, float]:
     return encode_tile(out), compute_s
 
 
-def assemble(height: int, width: int, parts: list[tuple[TileSpec, bytes]]) -> np.ndarray:
+def assemble(height: int, width: int, parts: list[tuple[TileSpec, bytes]], scale: int = 1) -> np.ndarray:
     """Aggregation stage: decode tile results and stitch them into the final image."""
-    return reconstruct(height, width, [(spec, decode_tile(data)) for spec, data in parts])
+    return reconstruct(height, width, [(spec, decode_tile(data)) for spec, data in parts], scale)
 
 
 # --- in-memory variants used by the benchmark (no Redis / PNG overhead) -----
@@ -45,9 +45,11 @@ def run_sequential(img: np.ndarray, op: str) -> np.ndarray:
 
 
 def run_tiled(img: np.ndarray, op: str, tile_size: int, workers: int,
-              pool: ProcessPoolExecutor | None = None) -> np.ndarray:
-    """Split into tiles, process them on `workers` processes, stitch back."""
-    tiles = split_image(img, tile_size, get_op(op).halo)
+              pool: ProcessPoolExecutor | None = None, halo: int | None = None) -> np.ndarray:
+    """Split into tiles, process them on `workers` processes, stitch back.
+    `halo` overrides the op's halo (used by halo calibration)."""
+    o = get_op(op)
+    tiles = split_image(img, tile_size, o.halo if halo is None else halo, o.align)
     jobs = [(op, np.ascontiguousarray(t)) for _, t in tiles]
     if workers <= 1 and pool is None:
         outs = [_apply(j) for j in jobs]
@@ -57,4 +59,4 @@ def run_tiled(img: np.ndarray, op: str, tile_size: int, workers: int,
         with ProcessPoolExecutor(workers, mp_context=MP_CONTEXT) as p:
             outs = list(p.map(_apply, jobs, chunksize=max(1, len(jobs) // (workers * 4))))
     h, w = img.shape[:2]
-    return reconstruct(h, w, [(spec, out) for (spec, _), out in zip(tiles, outs)])
+    return reconstruct(h, w, [(spec, out) for (spec, _), out in zip(tiles, outs)], o.scale)
