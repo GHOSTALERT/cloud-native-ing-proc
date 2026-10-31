@@ -15,7 +15,7 @@ spec:
         - name: api
           image: imgframe:latest
           imagePullPolicy: Never          # built inside minikube's Docker (see README)
-          envFrom: [{ configMapRef: { name: imgframe-config } }]
+          envFrom: [{ configMapRef: { name: imgframe-config } }, { secretRef: { name: s3-credentials } }]
           ports: [{ containerPort: 8000 }]
           resources:
             requests: { cpu: 500m, memory: 512Mi }

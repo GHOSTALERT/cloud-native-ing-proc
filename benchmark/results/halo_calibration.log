@@ -1,0 +1,23 @@
+[hed] halo   0: seam PSNR  16.02 dB, PSNR  24.57 dB, p99.9 |d| 155.0, max |d| 245, theory +0%, time 5.21s
+[hed] halo  16: seam PSNR  23.97 dB, PSNR  30.59 dB, p99.9 |d|  92.0, max |d| 153, theory +27%, time 6.10s
+[hed] halo  32: seam PSNR  28.04 dB, PSNR  33.85 dB, p99.9 |d|  77.0, max |d| 159, theory +56%, time 7.66s
+[hed] halo  48: seam PSNR  31.80 dB, PSNR  39.64 dB, p99.9 |d|  34.0, max |d|  96, theory +89%, time 8.00s
+[hed] halo  64: seam PSNR  37.85 dB, PSNR  45.36 dB, p99.9 |d|  20.0, max |d|  60, theory +125%, time 9.31s
+[hed] halo  80: seam PSNR  42.31 dB, PSNR  53.55 dB, p99.9 |d|   8.0, max |d|  20, theory +164%, time 10.78s
+[hed] halo  96: seam PSNR  55.04 dB, PSNR  67.48 dB, p99.9 |d|   1.0, max |d|  10, theory +206%, time 12.29s
+[hed] halo  98: seam PSNR  99.00 dB, PSNR  99.00 dB, p99.9 |d|   0.0, max |d|   0, theory +252%, time 14.33s
+[hed] chosen halo 80 px (theoretical 98 px): overhead 164% vs 252% for the exact halo
+
+[superres] halo   0: seam PSNR  33.30 dB, PSNR  47.69 dB, p99.9 |d|  14.0, max |d| 166, theory +0%, time 6.68s
+[superres] halo   2: seam PSNR  39.27 dB, PSNR  52.93 dB, p99.9 |d|   7.0, max |d|  61, theory +3%, time 7.42s
+[superres] halo   4: seam PSNR  42.21 dB, PSNR  55.77 dB, p99.9 |d|   5.0, max |d|  27, theory +6%, time 7.53s
+[superres] halo   6: seam PSNR  44.20 dB, PSNR  57.80 dB, p99.9 |d|   4.0, max |d|  25, theory +10%, time 6.76s
+[superres] halo   8: seam PSNR  46.14 dB, PSNR  59.72 dB, p99.9 |d|   3.0, max |d|  22, theory +13%, time 6.95s
+[superres] halo  10: seam PSNR  48.06 dB, PSNR  61.55 dB, p99.9 |d|   3.0, max |d|  14, theory +16%, time 6.90s
+[superres] halo  12: seam PSNR  51.53 dB, PSNR  64.93 dB, p99.9 |d|   2.0, max |d|   9, theory +20%, time 7.09s
+[superres] halo  16: seam PSNR  55.72 dB, PSNR  69.37 dB, p99.9 |d|   1.0, max |d|   5, theory +27%, time 7.35s
+[superres] halo  24: seam PSNR  68.00 dB, PSNR  82.74 dB, p99.9 |d|   0.0, max |d|   1, theory +41%, time 7.66s
+[superres] halo  34: seam PSNR  99.00 dB, PSNR  99.00 dB, p99.9 |d|   0.0, max |d|   0, theory +60%, time 8.61s
+[superres] chosen halo 4 px (theoretical 34 px): overhead 6% vs 60% for the exact halo
+
+wrote imgframe/calibration.json, benchmark/results/halo_calibration.json and .png

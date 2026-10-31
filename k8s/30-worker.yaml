@@ -17,10 +17,10 @@ spec:
           image: imgframe:latest
           imagePullPolicy: Never
           command: ["python", "-m", "worker.main"]
-          envFrom: [{ configMapRef: { name: imgframe-config } }]
+          envFrom: [{ configMapRef: { name: imgframe-config } }, { secretRef: { name: s3-credentials } }]
           env:
             - name: HOSTNAME
               valueFrom: { fieldRef: { fieldPath: metadata.name } }
           resources:
             requests: { cpu: 500m, memory: 256Mi }
-            limits: { cpu: "1", memory: 1Gi }
+            limits: { cpu: "1", memory: 2Gi }   # HED: ~1 GB for a 512 px tile

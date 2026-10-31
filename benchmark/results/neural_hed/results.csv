@@ -1,0 +1,7 @@
+op,mode,workers,time_s,speedup,efficiency,match_pct,cpu_avg_pct,cpu_peak_pct,cores_busy_avg,rss_peak_mb
+hed,sequential,1,20.2142,1.0,1.0,100.0,7.9,49.1,1.27,2467.0
+hed,parallel,1,29.5606,0.68,0.68,99.68,8.6,86.2,1.38,3059.7
+hed,parallel,2,15.9431,1.27,0.63,99.68,14.3,100.0,2.28,3700.2
+hed,parallel,4,9.2061,2.2,0.55,99.68,28.4,100.0,4.55,4780.7
+hed,parallel,8,8.2532,2.45,0.31,99.68,56.1,100.0,8.97,6322.0
+hed,parallel,16,9.6546,2.09,0.13,99.68,92.8,100.0,14.85,9339.6

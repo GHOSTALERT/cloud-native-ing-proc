@@ -8,8 +8,9 @@ Two extensions for neural operations:
   * scale: an operation may change the output size (4x super-resolution), so
     cropping and stitching multiply every offset by the op's scale factor.
   * align: a CNN with pooling stride 16 only gives the same output for the same
-    pixel if the tile starts on the same pooling grid, so halo origins are
-    snapped down to a multiple of `align`.
+    pixel if the tile lies on the same pooling grid (and, for HED, if the
+    coarse side outputs are resized back by exactly the same ratio), so both
+    halo edges are snapped outward to a multiple of `align`.
 """
 from dataclasses import asdict, dataclass
 from typing import Iterable, Iterator
@@ -57,8 +58,10 @@ def plan_tiles(height: int, width: int, tile_size: int, halo: int, align: int = 
                 TileSpec(
                     index=len(specs),
                     y0=y0, y1=y1, x0=x0, x1=x1,
-                    hy0=max(0, (y0 - halo) // align * align), hy1=min(height, y1 + halo),
-                    hx0=max(0, (x0 - halo) // align * align), hx1=min(width, x1 + halo),
+                    hy0=max(0, (y0 - halo) // align * align),
+                    hy1=min(height, -(-(y1 + halo) // align) * align),
+                    hx0=max(0, (x0 - halo) // align * align),
+                    hx1=min(width, -(-(x1 + halo) // align) * align),
                 )
             )
     return specs

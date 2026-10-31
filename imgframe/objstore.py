@@ -63,6 +63,8 @@ class ObjStore:
         """Create the bucket if needed, block public access and expire job objects."""
         from botocore.exceptions import ClientError
 
+        if not settings.s3_manage_bucket:
+            return
         try:
             self.s3.head_bucket(Bucket=self.bucket)
         except ClientError:

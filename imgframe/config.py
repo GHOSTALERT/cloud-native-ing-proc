@@ -41,6 +41,9 @@ class Settings:
     s3_sse: str = os.environ.get("S3_SSE", "")                       # "", "AES256" or "aws:kms"
     s3_kms_key_id: str = os.environ.get("S3_KMS_KEY_ID", "")
     presign_seconds: int = _int("PRESIGN_SECONDS", 300)
+    # Create the bucket and its lifecycle rule at startup (MinIO). On AWS the bucket is
+    # provisioned by deploy/aws/setup_s3.sh and the service roles cannot create it.
+    s3_manage_bucket: bool = os.environ.get("S3_MANAGE_BUCKET", "1") not in ("0", "false", "no")
     # "redirect": GET /jobs/{id}/result answers 307 -> presigned URL; "proxy": stream via API.
     result_delivery: str = os.environ.get("RESULT_DELIVERY", "redirect")
     # Back-pressure in S3 mode: refuse new jobs while this many tiles are queued.

@@ -43,7 +43,7 @@
 <body>
 <header><div class="in">
   <h1>Cloud-Native Parallel Image Processing</h1>
-  <p>Upload → partition into tiles → Redis task queue → parallel workers → aggregation → reconstructed image</p>
+  <p>Upload → cost-aware plan → tiles in object storage (S3/MinIO) → Redis task queue → parallel workers → aggregation → presigned download</p>
 </div></header>
 <main>
   <div class="grid">
@@ -53,7 +53,8 @@
         <form id="f">
           <label>Image <input type="file" name="file" id="file" accept="image/*" required></label>
           <label>Operation <select name="op" id="op"></select></label>
-          <label>Tile size (px) <input type="number" name="tile_size" value="512" min="32" max="8192" step="32"></label>
+          <label>Tile size (px) <input name="tile_size" value="auto" list="tiles" size="6" title="auto = the planner decides local vs distributed and the tile size"></label>
+          <datalist id="tiles"><option value="auto"><option value="256"><option value="512"><option value="1024"><option value="2048"></datalist>
           <button id="go">Process</button>
         </form>
         <div class="bar" id="barwrap"><div id="bar"></div></div>
@@ -127,14 +128,20 @@ async function show(id) {
   $('status').innerHTML = `Job <b>${job.id}</b> <span class="pill ${job.status}">${job.status}</span> &nbsp; ${job.done} / ${job.total} tiles` +
     ` &nbsp;·&nbsp; ${job.retries} retr${job.retries === 1 ? 'y' : 'ies'}` + (job.error ? ` — ${esc(job.error)}` : '');
   const t = job.timings;
-  kv($('timings'), [['Image', `${job.width} × ${job.height}`], ['Operation', job.op], ['Tiles', `${job.total} × ${job.tile_size}px`],
-    ['Upload decode + partition', sec(t.partition_s)], ['Queue wait', sec(t.queue_wait_s)],
-    ['Parallel processing', sec(t.processing_s)], ['Compute (sum of tiles)', sec(t.compute_s)],
-    ['Aggregation', sec(t.aggregate_s)], ['End-to-end', sec(t.total_s)]]);
+  const plan = job.plan_mode === 'local' ? 'local (single tile)' : job.plan_mode === 'fixed' ? 'fixed tile size' : `distributed, ${job.planned_workers} workers`;
+  kv($('timings'), [['Image', `${job.width} × ${job.height}` + (job.scale > 1 ? ` → ×${job.scale}` : '')], ['Operation', job.op],
+    ['Plan', plan], ['Tiles', `${job.total} × ${job.tile_size}px`], ['Storage', job.storage],
+    ['Queued work', job.work_s != null ? Number(job.work_s).toFixed(2) + ' s' : null],
+    ['Upload decode + partition', sec(t.partition_s)], ['…of which tile upload', sec(t.upload_s)], ['Queue wait', sec(t.queue_wait_s)],
+    ['Parallel processing', sec(t.processing_s)], ['Compute (sum of tiles)', sec(t.compute_s)], ['Tile I/O (sum)', sec(t.io_s)],
+    ['Aggregation', sec(t.aggregate_s)], ['End-to-end', sec(t.total_s)], ['Predicted by planner', sec(job.predicted_s)]]);
   if (job.status === 'done') {
     $('res').src = `jobs/${id}/result?max_side=1200`;
     $('rescap').textContent = `Result (${job.op})`;
-    $('links').innerHTML = `Full resolution: <a href="jobs/${id}/result">PNG</a> · <a href="jobs/${id}/result?format=jpg">JPG</a> · <a href="jobs/${id}" target="_blank">job JSON</a>`;
+    $('links').innerHTML = (job.output === 'tiled-tiff'
+      ? `Full resolution: <a href="jobs/${id}/result?format=tif">tiled TIFF</a>`
+      : `Full resolution: <a href="jobs/${id}/result">PNG</a> · <a href="jobs/${id}/result?format=jpg">JPG</a>`)
+      + ` · <a href="jobs/${id}" target="_blank">job JSON</a>` + (job.storage === 's3' ? ' · downloads are short-lived presigned S3 links' : '');
     $('go').disabled = false;
   } else if (job.status === 'failed') {
     $('go').disabled = false;
@@ -146,8 +153,10 @@ async function show(id) {
 async function refresh() {
   try {
     const m = await (await fetch('metrics')).json();
-    kv($('metrics'), [['Pending tasks', m.pending], ['In progress', m.processing], ['Tiles processed', m.tasks_done],
-      ['Retries (fault recovery)', m.retries], ['Active workers', m.active_workers]]);
+    kv($('metrics'), [['Storage', m.storage], ['Queued work (autoscaler input)', m.work_seconds.toFixed(2) + ' s'],
+      ['Pending tasks', m.pending], ['In progress', m.processing], ['Tiles processed', m.tasks_done],
+      ['Retries (fault recovery)', m.retries], ['Active workers', m.active_workers],
+      ['Redis memory', m.redis_used_memory != null ? (m.redis_used_memory / 2**20).toFixed(1) + ' MB' : null]]);
     $('workers').innerHTML = '<tr><th>Worker</th><th class="num">Tiles</th><th class="num">Busy</th></tr>' +
       m.workers.map(w => `<tr><td><span class="dot ${w.alive ? '' : 'dead'}"></span>${esc(w.id)}</td><td class="num">${w.tiles}</td><td class="num">${w.busy_s.toFixed(1)} s</td></tr>`).join('');
     const jobs = await (await fetch('jobs?limit=8')).json();

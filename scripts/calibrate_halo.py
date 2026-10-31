@@ -33,7 +33,7 @@ from imgframe.pipeline import run_sequential, run_tiled  # noqa: E402
 from imgframe.tiling import plan_tiles  # noqa: E402
 
 SWEEPS = {
-    "hed": [0, 4, 8, 16, 24, 32, 48, 64, 98],
+    "hed": [0, 16, 32, 48, 64, 80, 96, 98],   # snapped to the 16 px pooling grid
     "superres": [0, 2, 4, 6, 8, 10, 12, 16, 24, 34],
 }
 SIZES = {"hed": 1024, "superres": 512}       # input side; superres output is 4x larger
@@ -69,11 +69,12 @@ def calibrate(op: str, img: np.ndarray, tile: int, psnr_min: float, p999_max: fl
         tiled = run_tiled(img, op, tile, workers=1, halo=halo)
         t = time.perf_counter() - t0
         diff = np.abs(full.astype(np.int16) - tiled)
-        row = {"halo": halo, "psnr_db": round(psnr(full, tiled), 2),
+        eff = -(-halo // o.align) * o.align  # halo actually used after grid snapping
+        row = {"halo": halo, "effective_halo": eff, "psnr_db": round(psnr(full, tiled), 2),
                "seam_psnr_db": round(psnr(full[mask], tiled[mask]), 2),
                "max_abs": int(diff.max()), "p999_abs": float(np.percentile(diff, 99.9)),
                "mean_abs": round(float(diff.mean()), 4),
-               "overhead_theory": round(((tile + 2 * halo) ** 2) / tile ** 2 - 1, 3),
+               "overhead_theory": round(((tile + 2 * eff) ** 2) / tile ** 2 - 1, 3),
                "time_s": round(t, 3)}
         rows.append(row)
         print(f"[{op}] halo {halo:3d}: seam PSNR {row['seam_psnr_db']:6.2f} dB, PSNR {row['psnr_db']:6.2f} dB, "
@@ -85,7 +86,7 @@ def calibrate(op: str, img: np.ndarray, tile: int, psnr_min: float, p999_max: fl
     ok = [r for r in rows if r["seam_psnr_db"] >= psnr_min and r["p999_abs"] <= p999_max]
     chosen = ok[0] if ok else rows[-1]
     print(f"[{op}] chosen halo {chosen['halo']} px (theoretical {o.theoretical_halo} px): "
-          f"overhead {chosen['overhead_theory']:.0%} vs {((tile + 2 * o.theoretical_halo) ** 2) / tile ** 2 - 1:.0%}\n")
+          f"overhead {chosen['overhead_theory']:.0%} vs {rows[-1]['overhead_theory']:.0%} for the exact halo\n")
     return {"halo": chosen["halo"], "theoretical_halo": o.theoretical_halo, "tile_size": tile,
             "image": f"{w}x{h}", "whole_image_s": round(t_full, 3),
             "criterion": {"seam_psnr_min_db": psnr_min, "p999_abs_max": p999_max}, "sweep": rows}

@@ -1,6 +1,6 @@
 {
   "hed": {
-    "halo": 98,
+    "halo": 80,
     "theoretical_halo": 98,
     "criterion": {
       "seam_psnr_min_db": 40.0,

@@ -50,7 +50,7 @@ def start_minio(port: int, data_dir: str | None = None) -> dict:
             "AWS_ACCESS_KEY_ID": MINIO_USER, "AWS_SECRET_ACCESS_KEY": MINIO_PASSWORD}
 
 
-def start_redis(port: int) -> str:
+def start_redis(port: int, maxmemory: str | None = None) -> str:
     """Start a throwaway Redis on `port`; returns its URL.
 
     Uses a real redis-server (.tools/bin, see scripts/build_redis.sh) when present,
@@ -60,7 +60,8 @@ def start_redis(port: int) -> str:
 
     if REDIS_BIN.exists():
         p = subprocess.Popen([str(REDIS_BIN), "--port", str(port), "--bind", "127.0.0.1",
-                              "--save", "", "--appendonly", "no", "--loglevel", "warning"],
+                              "--save", "", "--appendonly", "no", "--loglevel", "warning"]
+                             + (["--maxmemory", maxmemory] if maxmemory else []),
                              stdout=subprocess.DEVNULL)
         _redis_procs.append(p)
         atexit.register(lambda: p.poll() is None and p.terminate())

@@ -20,10 +20,11 @@ from concurrent.futures import ProcessPoolExecutor
 
 import cv2
 
+from imgframe import planner
 from imgframe.config import settings
 from imgframe.objstore import job_prefix
 from imgframe.pipeline import assemble, process_tile
-from imgframe.store import Store
+from imgframe.store import PROCESSING, Store
 from imgframe.tiling import decode_tile, encode_tile, stream_tiled_tiff
 
 log = logging.getLogger("worker")
@@ -123,7 +124,12 @@ class Worker:
         store_s = time.perf_counter() - t1
         self.store.r.hincrbyfloat(f"imgframe:job:{payload.job_id}", "io_s", payload.fetch_s + store_s)
         try:
-            self.store.update_profile(payload.op, compute_s, payload.spec.halo_pixels)
+            # The tile ran next to `busy` others; remove that contention (the planner applies
+            # it again through S_op(n)) so c_op stays a single-worker cost.
+            busy = max(1, self.store.r.llen(PROCESSING) + 1)
+            cap = planner.overheads("cluster", op=payload.op)
+            self.store.update_profile(payload.op, compute_s * cap.speedup(busy) / busy,
+                                      payload.spec.halo_pixels)
         except Exception:
             log.debug("profile update failed", exc_info=True)
         self.store.record_worker(self.id, tiles=1, busy_s=time.perf_counter() - t0)

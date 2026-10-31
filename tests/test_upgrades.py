@@ -140,13 +140,15 @@ def test_streamed_tiff_equals_in_memory(image, tmp_path):
 
 @pytest.mark.skipif(not available("hed"), reason="HED model not downloaded")
 def test_hed_tiled_with_calibrated_halo(image):
-    img = cv2.resize(image, (384, 384))
+    from scripts.calibrate_halo import psnr
+
+    img = cv2.resize(image, (512, 512))
     full = run_sequential(img, "hed")
-    tiled = run_tiled(img, "hed", 128, workers=1)
     assert full.shape == img.shape[:2] and full.dtype == np.uint8
-    assert np.abs(full.astype(int) - tiled).max() <= 16      # calibrated: small seam error
-    naive = run_tiled(img, "hed", 128, workers=1, halo=0)
-    assert np.abs(full.astype(int) - naive).mean() > np.abs(full.astype(int) - tiled).mean()
+    tiled = run_tiled(img, "hed", 256, workers=1)
+    assert psnr(full, tiled) >= 40                                 # calibrated halo
+    assert np.array_equal(run_tiled(img, "hed", 256, workers=1, halo=98), full)  # exact halo
+    assert psnr(full, run_tiled(img, "hed", 256, workers=1, halo=0)) < psnr(full, tiled) - 5  # naive
 
 
 @pytest.mark.skipif(not available("superres"), reason="super-resolution model not downloaded")
@@ -169,9 +171,9 @@ def client(store):
 
 # --------------------------------------------------------------- Upgrade 3
 def test_planner_keeps_cheap_ops_local_and_distributes_heavy_ones():
-    canny = planner.plan("canny", 8192, 8192, 16)
-    assert canny.mode == "local"
-    bil = planner.plan("bilateral", 8192, 8192, 16)
+    canny = planner.plan("canny", 8192, 8192, 16, backend="engine")
+    assert canny.mode == "local" and canny.predicted_s == canny.t_local_s
+    bil = planner.plan("bilateral", 8192, 8192, 16, backend="engine")
     assert bil.mode == "distributed" and bil.predicted_s < bil.t_local_s
     hed = planner.plan("hed", 2048, 2048, 8)
     assert hed.mode == "distributed" and hed.tile_size >= 512   # big halo -> avoid small tiles

@@ -64,8 +64,14 @@ def create_app(store: Store | None = None, run_reaper: bool = True) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        if store.obj is not None:
-            await run_in_threadpool(store.obj.ensure_bucket)
+        if store.obj is not None:  # MinIO may still be starting (Compose / Kubernetes)
+            for attempt in range(60):
+                try:
+                    await run_in_threadpool(store.obj.ensure_bucket)
+                    break
+                except Exception as exc:
+                    log.warning("object store not ready (%s); retrying", exc)
+                    await asyncio.sleep(2)
         task = asyncio.create_task(reaper()) if run_reaper else None
         yield
         if task:
@@ -83,14 +89,16 @@ def create_app(store: Store | None = None, run_reaper: bool = True) -> FastAPI:
         except Exception:
             return 1
 
+    backend = "cluster" if store.obj is not None else "cluster_redis"
+
     def make_plan(op: str, h: int, w: int, tile_size: int | None) -> planner.Plan:
         """Planner decision, or the user's fixed tile size (naive tiling) as an override."""
         c = store.profile_c_op(op)  # online estimate, refined by the workers
         n = workers_available()
         if tile_size is None and settings.planner:
-            return planner.plan(op, h, w, n, c=c, margin=settings.planner_margin)
+            return planner.plan(op, h, w, n, backend=backend, c=c, margin=settings.planner_margin)
         ts = tile_size or settings.tile_size
-        ov, c = planner.overheads(), c or planner.c_op(op)
+        ov, c = planner.overheads(backend, op=op), c or planner.c_op(op)
         t, k = planner.predict(op, h, w, ts, n, c, ov)
         return planner.Plan(op, "fixed", ts, n, k, t, planner.predict_local(op, h, w, c, ov, True), t,
                             "tile size given by the request")
@@ -110,7 +118,7 @@ def create_app(store: Store | None = None, run_reaper: bool = True) -> FastAPI:
         if store.obj is not None and not store.queue_ok(len(tiles)):
             raise Busy("task queue is full; retry when running jobs finish")
         partition_s = time.perf_counter() - t0
-        c, ov = store.profile_c_op(op) or planner.c_op(op), planner.overheads()
+        c, ov = store.profile_c_op(op) or planner.c_op(op), planner.overheads(backend, op=op)
         costs = {s.index: planner.tile_cost(op, s.halo_pixels, c, ov) for s, _ in tiles}
         job_id = store.new_job_id()
         if store.obj is not None:
@@ -233,7 +241,7 @@ def create_app(store: Store | None = None, run_reaper: bool = True) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         c = store.profile_c_op(op)
-        p = planner.plan(op, height, width, workers or workers_available(), c=c,
+        p = planner.plan(op, height, width, workers or workers_available(), backend=backend, c=c,
                          margin=settings.planner_margin)
         return {**p.to_dict(), "c_op": c or planner.c_op(op), "c_op_source": "online" if c else "profile"}
 

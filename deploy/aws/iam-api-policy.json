@@ -1,0 +1,37 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WriteInputsAndTiles",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": ["arn:aws:s3:::BUCKET/jobs/*/input.*", "arn:aws:s3:::BUCKET/jobs/*/tiles/*",
+                   "arn:aws:s3:::BUCKET/jobs/*/result.*"]
+    },
+    {
+      "Sid": "ReadOutputsForPresignAndEncoding",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": ["arn:aws:s3:::BUCKET/jobs/*/output.*", "arn:aws:s3:::BUCKET/jobs/*/result.*"]
+    },
+    {
+      "Sid": "DeleteJobs",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::BUCKET/jobs/*"
+    },
+    {
+      "Sid": "ListForDelete",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::BUCKET",
+      "Condition": { "StringLike": { "s3:prefix": "jobs/*" } }
+    },
+    {
+      "Sid": "UseTheKey",
+      "Effect": "Allow",
+      "Action": ["kms:GenerateDataKey", "kms:Decrypt"],
+      "Resource": "KMS_KEY_ARN"
+    }
+  ]
+}

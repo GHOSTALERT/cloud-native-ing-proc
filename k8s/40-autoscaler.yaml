@@ -1,4 +1,9 @@
-# Queue-length autoscaler: replicas = clamp(ceil(queue_depth / TASKS_PER_WORKER), MIN, MAX)
+# Work-aware autoscaler (POLICY=work):
+#   replicas = clamp(max(ceil(W / (D*u)), ceil(rate / u)), MIN, MAX)
+# W = predicted compute-seconds queued, D = LATENCY_TARGET_S - POD_STARTUP_S, u = TARGET_UTILIZATION.
+# POLICY=queue restores the original rule ceil(queue_depth / TASKS_PER_WORKER).
+# Do not run together with optional/hpa-cpu.yaml or optional/keda-scaledobject.yaml
+# (scripts/k8s_scaler.sh switches between the three).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -43,12 +48,16 @@ spec:
           image: imgframe:latest
           imagePullPolicy: Never
           command: ["python", "-m", "autoscaler.main"]
-          envFrom: [{ configMapRef: { name: imgframe-config } }]
+          envFrom: [{ configMapRef: { name: imgframe-config } }, { secretRef: { name: s3-credentials } }]
           env:
             - { name: NAMESPACE, value: imgframe }
             - { name: WORKER_DEPLOYMENT, value: worker }
             - { name: MIN_WORKERS, value: "1" }
             - { name: MAX_WORKERS, value: "8" }
+            - { name: POLICY, value: work }
+            - { name: LATENCY_TARGET_S, value: "30" }
+            - { name: TARGET_UTILIZATION, value: "0.8" }
+            - { name: POD_STARTUP_S, value: "5" }
             - { name: TASKS_PER_WORKER, value: "16" }
             - { name: SCALE_DOWN_DELAY, value: "30" }
           resources:
