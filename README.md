@@ -7,6 +7,7 @@
 ![Storage](https://img.shields.io/badge/storage-S3%20%2F%20MinIO%20%2B%20Redis-c2410c)
 ![Tests](https://img.shields.io/badge/tests-43%20passing-2e7d32)
 ![Course](https://img.shields.io/badge/VIT-BECE355L%20Advanced%20Cloud%20Computing-1e3a8a)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 <p align="center">
   <img src="docs/figures/fig_architecture_v2.png" alt="Architecture" width="820"><br>
@@ -110,3 +111,7 @@ BECE355L Advanced Cloud Computing, VIT Vellore, Fall Semester 2026–27. Faculty
 | Vaanya Garg | 24BVD0139 |
 | Aditya Manoj | 24BVD0070 |
 | Arrnav Trisal | 24BVD0064 |
+
+## License
+
+Released under the [MIT License](LICENSE).
