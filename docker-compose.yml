@@ -1,29 +1,49 @@
 # Local multi-container run:  docker compose up --build --scale worker=4
 name: imgframe          # fixed project name -> containers imgframe-worker-1, ...
-# Web UI / API: http://localhost:8000
+# Web UI / API: http://localhost:8000      MinIO (S3 API, presigned downloads): http://localhost:9000
+x-s3: &s3
+  S3_ENDPOINT: http://minio:9000
+  S3_PUBLIC_ENDPOINT: http://localhost:9000     # host the browser uses for presigned URLs
+  S3_BUCKET: imgframe
+  AWS_ACCESS_KEY_ID: imgframe
+  AWS_SECRET_ACCESS_KEY: imgframe-secret
+
 services:
   redis:
     image: redis:7.2-alpine
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "3gb"]
+    # Pixels live in MinIO, so Redis holds only control data: 256 MB is plenty.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
       retries: 15
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    command: ["server", "/data", "--address", ":9000"]
+    environment:
+      MINIO_ROOT_USER: imgframe
+      MINIO_ROOT_PASSWORD: imgframe-secret
+      MINIO_BROWSER: "off"
+    ports: ["9000:9000"]
 
   api:
     build: .
     image: imgframe:latest
     ports: ["8000:8000"]
     environment:
+      <<: *s3
       REDIS_URL: redis://redis:6379/0
-      TILE_SIZE: "512"
+      PLANNER_WORKERS: "4"
     depends_on:
       redis: { condition: service_healthy }
+      minio: { condition: service_started }
 
   worker:
     image: imgframe:latest
     command: ["python", "-m", "worker.main"]
     environment:
+      <<: *s3
       REDIS_URL: redis://redis:6379/0
       WORKER_PROCS: "1"
       LEASE_SECONDS: "10"
@@ -33,5 +53,5 @@ services:
     deploy:
       replicas: 4
       resources:
-        limits: { cpus: "1.0", memory: 1g }
+        limits: { cpus: "1.0", memory: 2g }   # HED needs ~1 GB for a 512 px tile
     stop_grace_period: 25s

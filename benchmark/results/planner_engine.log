@@ -1,0 +1,9 @@
+[grayscale] 8192x8192: seq 0.027s | naive 0.420s (0.06x) | planner local t=8192 n=1: 0.024s (1.11x, pred 0.019s) | fixed-512 local n=1: 0.024s
+[canny] 8192x8192: seq 0.181s | naive 0.331s (0.55x) | planner local t=8192 n=1: 0.185s (0.98x, pred 0.174s) | fixed-512 local n=1: 0.185s
+[gaussian_blur] 8192x8192: seq 0.277s | naive 0.510s (0.54x) | planner local t=8192 n=1: 0.277s (1.00x, pred 0.281s) | fixed-512 local n=1: 0.277s
+[sobel] 8192x8192: seq 0.194s | naive 0.321s (0.60x) | planner local t=8192 n=1: 0.190s (1.02x, pred 0.254s) | fixed-512 local n=1: 0.190s
+[bilateral] 8192x8192: seq 4.958s | naive 0.975s (5.08x) | planner distributed t=512 n=12: 1.003s (4.94x, pred 0.778s) | fixed-512 distributed n=12: 1.003s
+[hed] 2048x2048: seq 20.314s | naive 10.173s (2.00x) | planner distributed t=512 n=8: 8.126s (2.50x, pred 5.740s) | fixed-512 distributed n=8: 8.126s
+[superres] 1024x1024: seq 25.204s | naive 11.665s (2.16x) | planner distributed t=512 n=4: 11.308s (2.23x, pred 11.766s) | fixed-512 distributed n=4: 11.308s
+
+prediction MAPE 24.97%; wrote benchmark/results/planner_engine.json and .png

@@ -1,6 +1,7 @@
 """Run the whole framework locally without Docker: a Redis server (--redis-url,
-else a local redis-server from .tools/bin, else an in-process fakeredis), the
-FastAPI service and N worker processes.
+else a local redis-server from .tools/bin, else an in-process fakeredis), a
+MinIO object store (.tools/bin/minio; --storage redis for the original
+all-in-Redis mode), the FastAPI service and N worker processes.
 
     python scripts/run_local.py --workers 4                # serve until Ctrl+C
     python scripts/run_local.py --workers 4 --demo         # scripted end-to-end run
@@ -22,10 +23,34 @@ sys.path.insert(0, str(ROOT))
 
 
 REDIS_BIN = ROOT / ".tools" / "bin" / "redis-server"
+MINIO_BIN = ROOT / ".tools" / "bin" / "minio"
+MINIO_USER, MINIO_PASSWORD = "imgframe", "imgframe-secret"
 _redis_procs: list[subprocess.Popen] = []
 
 
-def start_redis(port: int) -> str:
+def start_minio(port: int, data_dir: str | None = None) -> dict:
+    """Start a throwaway MinIO server; returns the env vars that point the services at it."""
+    import atexit
+    import shutil
+    import tempfile
+
+    if not MINIO_BIN.exists():
+        raise RuntimeError(f"{MINIO_BIN} missing (see the guide: scripts/fetch_minio.sh)")
+    tmp = data_dir or tempfile.mkdtemp(prefix="imgframe-minio-")
+    env = {**os.environ, "MINIO_ROOT_USER": MINIO_USER, "MINIO_ROOT_PASSWORD": MINIO_PASSWORD,
+           "MINIO_BROWSER": "off"}
+    p = subprocess.Popen([str(MINIO_BIN), "server", tmp, "--address", f"127.0.0.1:{port}", "--quiet"],
+                         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _redis_procs.append(p)
+    atexit.register(lambda: p.poll() is None and p.terminate())
+    if not data_dir:
+        atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
+    wait_http(f"http://127.0.0.1:{port}/minio/health/live")
+    return {"S3_ENDPOINT": f"http://127.0.0.1:{port}", "S3_BUCKET": "imgframe",
+            "AWS_ACCESS_KEY_ID": MINIO_USER, "AWS_SECRET_ACCESS_KEY": MINIO_PASSWORD}
+
+
+def start_redis(port: int, maxmemory: str | None = None) -> str:
     """Start a throwaway Redis on `port`; returns its URL.
 
     Uses a real redis-server (.tools/bin, see scripts/build_redis.sh) when present,
@@ -35,7 +60,8 @@ def start_redis(port: int) -> str:
 
     if REDIS_BIN.exists():
         p = subprocess.Popen([str(REDIS_BIN), "--port", str(port), "--bind", "127.0.0.1",
-                              "--save", "", "--appendonly", "no", "--loglevel", "warning"],
+                              "--save", "", "--appendonly", "no", "--loglevel", "warning"]
+                             + (["--maxmemory", maxmemory] if maxmemory else []),
                              stdout=subprocess.DEVNULL)
         _redis_procs.append(p)
         atexit.register(lambda: p.poll() is None and p.terminate())
@@ -130,7 +156,7 @@ def demo(api: str, workers: list[subprocess.Popen], args) -> int:
     if job["status"] != "done":
         return 1
 
-    with urllib.request.urlopen(f"{api}/jobs/{job['id']}/result") as r:
+    with urllib.request.urlopen(f"{api}/jobs/{job['id']}/result") as r:   # follows the S3 redirect
         result = decode_image(r.read())
     out = ROOT / "output" / f"{job['id']}_{args.op}.png"
     out.parent.mkdir(exist_ok=True)
@@ -148,8 +174,9 @@ def demo(api: str, workers: list[subprocess.Popen], args) -> int:
 
 def launch(n_workers: int, port: int, redis_url: str, worker_procs: int = 1,
            extra_env: dict | None = None) -> tuple[subprocess.Popen, list[subprocess.Popen], str]:
-    """Start the API and N worker processes; returns (api, workers, base_url)."""
-    env = {**os.environ, "REDIS_URL": redis_url, "PYTHONPATH": str(ROOT),
+    """Start the API and N worker processes; returns (api, workers, base_url).
+    `extra_env` carries e.g. the S3 settings from start_minio()."""
+    env = {**os.environ, "REDIS_URL": redis_url, "PYTHONPATH": str(ROOT), "S3_BUCKET": "",
            "WORKER_PROCS": str(worker_procs),
            "LEASE_SECONDS": os.environ.get("LEASE_SECONDS", "5"),
            "HEARTBEAT_SECONDS": os.environ.get("HEARTBEAT_SECONDS", "1"), **(extra_env or {})}
@@ -175,8 +202,10 @@ def stop(procs: list[subprocess.Popen]) -> None:
             p.kill()
 
 
-def submit(api: str, png: bytes, name: str, op: str, tile_size: int, wait_s: float = 300) -> dict:
-    """POST /jobs, retrying while the API answers 503 (back-pressure)."""
+def submit(api: str, png: bytes, name: str, op: str, tile_size: int | str = "auto",
+           wait_s: float = 300) -> dict:
+    """POST /jobs, retrying while the API answers 503 (back-pressure).
+    tile_size "auto" lets the planner decide; a number forces naive tiling."""
     import urllib.error
 
     body, ctype = multipart({"op": op, "tile_size": tile_size}, "file", name, png)
@@ -202,19 +231,23 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--redis-url", help="use a real Redis instead of the built-in fake one")
     ap.add_argument("--redis-port", type=int, default=6390)
+    ap.add_argument("--storage", choices=["s3", "redis"], default="s3" if MINIO_BIN.exists() else "redis",
+                    help="s3: pixels in MinIO (default when .tools/bin/minio exists); redis: original mode")
+    ap.add_argument("--minio-port", type=int, default=9000)
     ap.add_argument("--demo", action="store_true", help="submit one job, verify it, then exit")
     ap.add_argument("--kill-worker", action="store_true", help="SIGKILL a worker mid-job during --demo")
     ap.add_argument("--image", help="image for --demo (default: generated)")
     ap.add_argument("--size", type=int, default=4096, help="generated image side length")
     ap.add_argument("--op", default="canny")
-    ap.add_argument("--tile-size", type=int, default=512)
+    ap.add_argument("--tile-size", default="auto", help="'auto' (planner) or a number (naive tiling)")
     args = ap.parse_args()
 
     def _terminate(*_):  # `kill <pid>` shuts the whole stack down like Ctrl+C
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, _terminate)
 
-    busy = [p for p in [args.port] + ([] if args.redis_url else [args.redis_port]) if port_in_use(p)]
+    busy = [p for p in [args.port] + ([] if args.redis_url else [args.redis_port])
+            + ([args.minio_port] if args.storage == "s3" else []) if port_in_use(p)]
     if busy:
         print(f"Port {', '.join(map(str, busy))} already in use: another run_local.py (or docker compose) "
               f"is still running. Stop it with Ctrl+C in its terminal, or pass --port / --redis-port.")
@@ -223,9 +256,11 @@ def main() -> int:
     redis_url = args.redis_url
     if not redis_url:
         redis_url = start_redis(args.redis_port)
-    api, workers, url = launch(args.workers, args.port, redis_url, args.worker_procs)
+    s3 = start_minio(args.minio_port) if args.storage == "s3" else {}
+    api, workers, url = launch(args.workers, args.port, redis_url, args.worker_procs, s3)
     try:
-        print(f"API ready at {url}  ({args.workers} workers, redis {redis_url})")
+        print(f"API ready at {url}  ({args.workers} workers, redis {redis_url}, "
+              f"storage {'MinIO ' + s3['S3_ENDPOINT'] if s3 else 'redis'})")
         if args.demo:
             return demo(url, workers, args)
         print("Open the URL in a browser. Ctrl+C to stop.")

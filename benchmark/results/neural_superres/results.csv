@@ -1,0 +1,7 @@
+op,mode,workers,time_s,speedup,efficiency,match_pct,cpu_avg_pct,cpu_peak_pct,cores_busy_avg,rss_peak_mb
+superres,sequential,1,27.5612,1.0,1.0,100.0,8.0,48.5,1.29,1347.8
+superres,parallel,1,26.7417,1.03,1.03,98.884,8.6,90.1,1.37,1848.9
+superres,parallel,2,15.2249,1.81,0.91,98.884,15.9,99.4,2.54,2423.4
+superres,parallel,4,11.7222,2.35,0.59,98.884,30.7,98.2,4.91,2665.5
+superres,parallel,8,11.6652,2.36,0.3,98.884,30.8,97.5,4.93,2829.9
+superres,parallel,16,11.3223,2.43,0.15,98.884,31.3,100.0,5.01,3208.2

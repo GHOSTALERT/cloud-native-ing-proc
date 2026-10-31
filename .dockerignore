@@ -1,7 +1,11 @@
 .venv
 .tools
+.git
 output
-benchmark/results
+docs
+benchmark
 **/__pycache__
 .pytest_cache
 tests
+models/*.caffemodel
+models/*.prototxt

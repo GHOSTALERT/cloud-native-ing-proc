@@ -10,8 +10,22 @@ metadata:
   namespace: imgframe
 data:
   REDIS_URL: redis://redis:6379/0
-  TILE_SIZE: "512"
   LEASE_SECONDS: "10"
   HEARTBEAT_SECONDS: "2"
   MAX_RETRIES: "3"
   WORKER_PROCS: "1"
+  # Object storage: MinIO inside the cluster (on AWS: drop S3_ENDPOINT, use IRSA roles).
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET: imgframe
+  # Planner sizes plans for the autoscaler's maximum, since workers are added on demand.
+  PLANNER_WORKERS: "8"
+---
+# Demo credentials for MinIO. On AWS use IAM roles for service accounts instead (deploy/aws).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-credentials
+  namespace: imgframe
+stringData:
+  AWS_ACCESS_KEY_ID: imgframe
+  AWS_SECRET_ACCESS_KEY: imgframe-secret

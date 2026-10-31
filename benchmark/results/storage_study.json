@@ -1,0 +1,36 @@
+[
+  {
+    "mode": "redis",
+    "redis_maxmemory": "1gb",
+    "largest_accepted": 8192,
+    "redis_bytes_per_8192_job": 226366904,
+    "redis_used_growth_one_job": 227205792,
+    "concurrent_8192_jobs_accepted": 2,
+    "concurrent_limit_hit": true,
+    "io_ms_per_tile": 7.245,
+    "bilateral_4096": {
+      "partition_s": 0.3582,
+      "upload_s": 0.0,
+      "processing_s": 0.3069,
+      "aggregate_s": 0.115,
+      "total_s": 0.8228
+    }
+  },
+  {
+    "mode": "s3",
+    "redis_maxmemory": "1gb",
+    "largest_accepted": 16384,
+    "redis_bytes_per_8192_job": 53704,
+    "redis_used_growth_one_job": 99272,
+    "concurrent_8192_jobs_accepted": 12,
+    "concurrent_limit_hit": false,
+    "io_ms_per_tile": 8.57,
+    "bilateral_4096": {
+      "partition_s": 0.4554,
+      "upload_s": 0.0998,
+      "processing_s": 0.3534,
+      "aggregate_s": 0.1348,
+      "total_s": 1.0912
+    }
+  }
+]

@@ -14,11 +14,11 @@ spec:
       containers:
         - name: redis
           image: redis:7.2-alpine
-          args: ["--save", "", "--appendonly", "no", "--maxmemory", "3gb"]
+          args: ["--save", "", "--appendonly", "no", "--maxmemory", "256mb"]   # control data only
           ports: [{ containerPort: 6379 }]
           resources:
-            requests: { cpu: 250m, memory: 512Mi }
-            limits: { memory: 3584Mi }
+            requests: { cpu: 250m, memory: 128Mi }
+            limits: { memory: 384Mi }
           readinessProbe:
             exec: { command: ["redis-cli", "ping"] }
             periodSeconds: 3

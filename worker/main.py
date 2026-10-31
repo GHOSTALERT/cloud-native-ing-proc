@@ -1,6 +1,8 @@
-"""Worker: claims tile tasks from Redis, processes them with OpenCV and stores
-the results. The worker that completes a job's last tile reconstructs the
-final image (aggregation).
+"""Worker: claims tile tasks from Redis, fetches the tile (from S3 in object
+storage mode), processes it with OpenCV or ONNX Runtime and stores the result.
+The worker that completes a job's last tile reconstructs the final image
+(aggregation); outputs too large to hold in memory are streamed to a tiled
+TIFF in object storage instead.
 
 Inside one worker, WORKER_PROCS slots run in parallel, each backed by a
 process from a ProcessPoolExecutor. Across workers, Kubernetes scales pods.
@@ -11,14 +13,19 @@ import os
 import random
 import signal
 import socket
+import tempfile
 import threading
 import time
 from concurrent.futures import ProcessPoolExecutor
 
+import cv2
+
+from imgframe import planner
 from imgframe.config import settings
+from imgframe.objstore import job_prefix
 from imgframe.pipeline import assemble, process_tile
-from imgframe.store import Store
-from imgframe.tiling import encode_tile
+from imgframe.store import PROCESSING, Store
+from imgframe.tiling import decode_tile, encode_tile, stream_tiled_tiff
 
 log = logging.getLogger("worker")
 # The worker is multi-threaded, so pool processes must not be fork()ed from it.
@@ -112,10 +119,35 @@ class Worker:
             log.exception("tile %s failed; will be retried", task)
             self.store.expire_lease(task)
             return
+        t1 = time.perf_counter()
         done, total = self.store.complete(task, result, compute_s)
+        store_s = time.perf_counter() - t1
+        self.store.r.hincrbyfloat(f"imgframe:job:{payload.job_id}", "io_s", payload.fetch_s + store_s)
+        try:
+            # The tile ran next to `busy` others; remove that contention (the planner applies
+            # it again through S_op(n)) so c_op stays a single-worker cost.
+            busy = max(1, self.store.r.llen(PROCESSING) + 1)
+            cap = planner.overheads("cluster", op=payload.op)
+            self.store.update_profile(payload.op, compute_s * cap.speedup(busy) / busy,
+                                      payload.spec.halo_pixels)
+        except Exception:
+            log.debug("profile update failed", exc_info=True)
         self.store.record_worker(self.id, tiles=1, busy_s=time.perf_counter() - t0)
         if done == total:
             self._aggregate(payload.job_id)
+
+    def _stream(self, job: dict) -> str:
+        """Stitch straight into a tiled BigTIFF in object storage (bounded memory)."""
+        job_id = job["id"]
+        key = job_prefix(job_id) + "output.tif"
+        parts = ((spec, decode_tile(data)) for spec, data in self.store.iter_results(job_id))
+        with tempfile.NamedTemporaryFile(suffix=".tif") as f:
+            preview = stream_tiled_tiff(f.name, job["height"], job["width"], job["tile_size"],
+                                        job["scale"], parts)
+            self.store.obj.upload_file(key, f.name, "image/tiff")
+        ok, buf = cv2.imencode(".jpg", preview, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        self.store.cache_encoded_result(job_id, "jpg.1200", buf.tobytes())
+        return key
 
     def _aggregate(self, job_id: str, attempts: int = 3) -> None:
         processed_at = time.time()  # last tile finished: the parallel phase is over
@@ -123,11 +155,18 @@ class Worker:
             t0 = time.perf_counter()
             try:
                 job = self.store.get_job(job_id)
-                img = assemble(job["height"], job["width"], self.store.load_results(job_id))
-                self.store.finish_job(job_id, encode_tile(img), time.perf_counter() - t0,
-                                      processed_at)
-                log.info("job %s reconstructed (%dx%d) in %.3fs", job_id, job["width"],
-                         job["height"], time.perf_counter() - t0)
+                out_mp = job["height"] * job["width"] * job["scale"] ** 2 / 1e6
+                if self.store.obj is not None and out_mp > settings.stream_output_mp:
+                    key = self._stream(job)
+                    self.store.finish_job(job_id, None, time.perf_counter() - t0, processed_at,
+                                          output_key=key)
+                else:
+                    img = assemble(job["height"], job["width"], self.store.load_results(job_id),
+                                   job["scale"])
+                    self.store.finish_job(job_id, encode_tile(img), time.perf_counter() - t0,
+                                          processed_at)
+                log.info("job %s reconstructed (%dx%d x%d) in %.3fs", job_id, job["width"],
+                         job["height"], job["scale"], time.perf_counter() - t0)
                 return
             except Exception as exc:
                 log.exception("aggregation attempt %d failed for %s", attempt, job_id)
